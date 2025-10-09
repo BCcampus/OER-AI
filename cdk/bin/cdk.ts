@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
 import { VpcStack } from "../lib/vpc-stack";
-//import { DatabaseStack } from "../lib/database-stack";
+import { DatabaseStack } from "../lib/database-stack";
 //import { ApiGatewayStack } from "../lib/api-stack";
 //import { DBFlowStack } from "../lib/dbFlow-stack";
 //import { AmplifyStack } from "../lib/amplify-stack";
@@ -21,4 +21,7 @@ const githubRepo = app.node.tryGetContext("githubRepo");
 const vpcStack = new VpcStack(app, `${StackPrefix}-VpcStack`, {
   env,
   stackPrefix: StackPrefix,
+});
+const dbStack = new DatabaseStack(app, `${StackPrefix}-Database`, vpcStack, {
+  env,
 });
