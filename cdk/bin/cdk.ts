@@ -2,7 +2,7 @@
 import * as cdk from "aws-cdk-lib";
 import { VpcStack } from "../lib/vpc-stack";
 import { DatabaseStack } from "../lib/database-stack";
-//import { ApiGatewayStack } from "../lib/api-stack";
+import { ApiGatewayStack } from "../lib/api-stack";
 import { DBFlowStack } from "../lib/dbFlow-stack";
 //import { AmplifyStack } from "../lib/amplify-stack";
 import { CICDStack } from "../lib/cicd-stack";
@@ -15,7 +15,7 @@ const env = {
 };
 
 const StackPrefix = app.node.tryGetContext("StackPrefix");
-const environment = app.node.tryGetContext("environmentName");
+const environment = app.node.tryGetContext("environment");
 const version = app.node.tryGetContext("versionNumber");
 const githubRepo = app.node.tryGetContext("githubRepo");
 
@@ -35,20 +35,26 @@ const dbFlowStack = new DBFlowStack(
   dbStack,
   { env }
 );
-
 const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
   env,
   githubRepo: githubRepo,
   environmentName: environment,
   lambdaFunctions: [
-    /* Example entry for additional Lambda functions and path filters
     {
       name: "dataIngestion",
-      functionName: `${StackPrefix}-Api-DataIngestionLambdaDockerFunc`,
-      sourceDir: "cdk/lambda/data_ingestion",
-    },*/
+      functionName: `${StackPrefix}-Api-DataIngestionLambdaDockerFunction`,
+      sourceDir: "cdk/lambda/dataIngestion",
+    },
   ],
-  pathFilters: [
-    //"cdk/lambda/data_ingestion/**",
-  ],
+  pathFilters: ["cdk/lambda/dataIngestion/**"],
 });
+const apiStack = new ApiGatewayStack(
+  app,
+  `${StackPrefix}-Api`,
+  dbStack,
+  vpcStack,
+  {
+    env,
+    ecrRepositories: cicdStack.ecrRepositories,
+  }
+);

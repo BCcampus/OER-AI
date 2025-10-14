@@ -98,7 +98,7 @@ export class ApiGatewayStack extends cdk.Stack {
     this.layerList["powertools"] = powertoolsLayer;
 
     const userPoolName = `${id}-UserPool`;
-    this.userPool = new cognito.UserPool(scope, `${id}-pool`, {
+    this.userPool = new cognito.UserPool(this, `${id}-pool`, {
       userPoolName: userPoolName,
       signInAliases: {
         email: true,
@@ -210,7 +210,7 @@ export class ApiGatewayStack extends cdk.Stack {
     });
 
     this.identityPool = new cognito.CfnIdentityPool(
-      scope,
+      this,
       `${id}-identity-pool`,
       {
         allowUnauthenticatedIdentities: true,
@@ -225,7 +225,7 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     const secretsName = `${id}-OER_Cognito_Secrets`;
-    this.secret = new secretsmanager.Secret(scope, secretsName, {
+    this.secret = new secretsmanager.Secret(this, secretsName, {
       secretName: secretsName,
       description: "Cognito Secrets for authentication",
       secretObjectValue: {
@@ -235,9 +235,7 @@ export class ApiGatewayStack extends cdk.Stack {
         VITE_COGNITO_USER_POOL_CLIENT_ID: cdk.SecretValue.unsafePlainText(
           this.appClient.userPoolClientId
         ),
-        VITE_AWS_REGION: cdk.SecretValue.unsafePlainText(
-          cdk.Stack.of(scope).region
-        ),
+        VITE_AWS_REGION: cdk.SecretValue.unsafePlainText(this.region),
         VITE_IDENTITY_POOL_ID: cdk.SecretValue.unsafePlainText(
           this.identityPool.ref
         ),
@@ -361,7 +359,7 @@ export class ApiGatewayStack extends cdk.Stack {
 
     wafAssociation.node.addDependency(this.api.deploymentStage);
 
-    const adminRole = new iam.Role(scope, `${id}-AdminRole`, {
+    const adminRole = new iam.Role(this, `${id}-AdminRole`, {
       assumedBy: new iam.FederatedPrincipal(
         "cognito-identity.amazonaws.com",
         {
@@ -377,7 +375,7 @@ export class ApiGatewayStack extends cdk.Stack {
     });
 
     adminRole.attachInlinePolicy(
-      new iam.Policy(scope, `${id}-AdminPolicy`, {
+      new iam.Policy(this, `${id}-AdminPolicy`, {
         statements: [
           createPolicyStatement(
             ["execute-api:Invoke"],
@@ -392,7 +390,7 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     const unauthenticatedRole = new iam.Role(
-      scope,
+      this,
       `${id}-UnauthenticatedRole`,
       {
         assumedBy: new iam.FederatedPrincipal(
@@ -712,6 +710,27 @@ export class ApiGatewayStack extends cdk.Stack {
     this.userPool.addTrigger(
       cognito.UserPoolOperation.POST_CONFIRMATION,
       AutoSignupLambda
+    );
+
+    const dataIngestionLambdaDockerFunction = new lambda.DockerImageFunction(
+      this,
+      `${id}-DataIngestionLambdaDockerFunction`,
+      {
+        code: lambda.DockerImageCode.fromEcr(
+          props.ecrRepositories["dataIngestion"],
+          {
+            tagOrDigest: "latest",
+          }
+        ),
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(900),
+        vpc: vpcStack.vpc, // Pass the VPC
+        functionName: `${id}-DataIngestionLambdaDockerFunction`,
+        description: "Handles document ingestion and embedding generation",
+        environment: {
+          REGION: this.region,
+        },
+      }
     );
   }
 }

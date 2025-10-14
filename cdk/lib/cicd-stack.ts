@@ -49,9 +49,7 @@ export class CICDStack extends cdk.Stack {
           "lambda:UpdateFunctionConfiguration",
         ],
         resources: [
-          `arn:aws:lambda:${this.region}:${this.account}:function:*-TextGenLambdaDockerFunction`,
-          `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestionLambdaDockerFunc`,
-          `arn:aws:lambda:${this.region}:${this.account}:function:*-ScoringLambdaFunction`,
+          `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestionLambdaDockerFunction`,
         ],
       })
     );
