@@ -225,7 +225,7 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     const secretsName = `${id}-OER_Cognito_Secrets`;
-    const secret = new secretsmanager.Secret(scope, secretsName, {
+    this.secret = new secretsmanager.Secret(scope, secretsName, {
       secretName: secretsName,
       description: "Cognito Secrets for authentication",
       secretObjectValue: {
@@ -494,8 +494,97 @@ export class ApiGatewayStack extends cdk.Stack {
         unauthenticated: unauthenticatedRole.roleArn,
       },
     });
-    
-    
-    
+
+    const jwtSecret = new secretsmanager.Secret(this, `${id}-JwtSecret`, {
+      secretName: `${id}-OER-JWTSecret`,
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({}),
+        generateStringKey: "jwtSecret",
+        excludePunctuation: true,
+        passwordLength: 64,
+      },
+    });
+
+    const adminAuthorizationFunction = new lambda.Function(
+      this,
+      `${id}-admin-authorization-api-gateway`,
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        code: lambda.Code.fromAsset("lambda/adminAuthorizerFunction"),
+        handler: "adminAuthorizerFunction.handler",
+        timeout: Duration.seconds(300),
+        vpc: vpcStack.vpc,
+        environment: {
+          SM_COGNITO_CREDENTIALS: this.secret.secretName,
+        },
+        functionName: `${id}-adminLambdaAuthorizer`,
+        memorySize: 512,
+        layers: [jwt],
+        role: lambdaRole,
+      }
+    );
+
+    adminAuthorizationFunction.grantInvoke(
+      new iam.ServicePrincipal("apigateway.amazonaws.com")
+    );
+
+    const apiGW_authorizationFunction = adminAuthorizationFunction.node
+      .defaultChild as lambda.CfnFunction;
+    apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
+
+    const userAuthFunction = new lambda.Function(
+      this,
+      `${id}-user-authorization-api-gateway`,
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        code: lambda.Code.fromAsset("lambda/userAuthorizerFunction"),
+        handler: "userAuthorizerFunction.handler",
+        timeout: Duration.seconds(300),
+        memorySize: 256,
+        layers: [jwt],
+        role: lambdaRole,
+        environment: {
+          JWT_SECRET: jwtSecret.secretArn,
+        },
+        functionName: `${id}-userLambdaAuthorizer`,
+      }
+    );
+    jwtSecret.grantRead(userAuthFunction);
+    userAuthFunction.grantInvoke(
+      new iam.ServicePrincipal("apigateway.amazonaws.com")
+    );
+
+    const apiGW_userauthorizationFunction = userAuthFunction.node
+      .defaultChild as lambda.CfnFunction;
+    apiGW_userauthorizationFunction.overrideLogicalId("userLambdaAuthorizer");
+
+    const publicTokenLambda = new lambda.Function(
+      this,
+      `${id}-PublicTokenFunction`,
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        handler: "publicTokenFunction.handler",
+        layers: [jwt],
+        code: lambda.Code.fromAsset("lambda/publicTokenFunction"),
+        environment: {
+          JWT_SECRET: jwtSecret.secretArn,
+        },
+        timeout: Duration.seconds(30),
+        memorySize: 128,
+        role: lambdaRole,
+      }
+    );
+
+    jwtSecret.grantRead(publicTokenLambda);
+
+    // Add the permission to the Lambda function's policy to allow API Gateway access
+    publicTokenLambda.grantInvoke(
+      new iam.ServicePrincipal("apigateway.amazonaws.com")
+    );
+
+    // Change Logical ID to match the one decleared in YAML file of Open API
+    const apiGW_publicTokenFunction = publicTokenLambda.node
+      .defaultChild as lambda.CfnFunction;
+    apiGW_publicTokenFunction.overrideLogicalId("PublicTokenFunction");
   }
 }
