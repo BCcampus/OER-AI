@@ -1,5 +1,5 @@
 import Header from "@/components/Header";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import TextbookCard from "./HomePage/TextbookCard";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
@@ -57,6 +57,7 @@ export default function HomePage() {
     },
   ];
 
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
@@ -87,31 +88,7 @@ export default function HomePage() {
           {/* Textbook Grid */}
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {textbooks.map((textbook) => (
-              <Card
-                key={textbook.id}
-                className="flex flex-col items-start p-[10px] transition-shadow hover:shadow-lg"
-              >
-                <CardHeader className="flex-1 p-0 w-full">
-                  <CardTitle className="line-clamp-3 text-base leading-tight text-left">
-                    {textbook.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0 w-full">
-                  <p className="truncate text-sm text-primary text-left">
-                    By {
-                      (() => {
-                        const authors = textbook.author;
-                        if (authors.length === 1) return authors[0];
-                        if (authors.length === 2) return `${authors[0]} & ${authors[1]}`;
-                        return authors.slice(0, -1).join(", ") + " & " + authors[authors.length - 1];
-                      })()
-                    }
-                  </p>
-                </CardContent>
-                <CardContent className="p-0 w-full">
-                  <p className="px-[10px] py-[5px] bg-primary text-primary-foreground border rounded-xl w-fit text-left">{textbook.category}</p>
-                </CardContent>
-              </Card>
+              <TextbookCard key={textbook.id} textbook={textbook} />
             ))}
           </div>
         </div>
