@@ -26,7 +26,7 @@ exports.handler = async (event) => {
   try {
     const pathData = event.httpMethod + " " + event.resource;
     switch (pathData) {
-      case "GET /user/exampleEndpoint":
+      case "GET /admin/exampleEndpoint":
         data = "Example endpoint invoked";
         response.body = JSON.stringify(data);
         break;
