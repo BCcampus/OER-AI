@@ -1,8 +1,13 @@
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";  
-
+import { Search } from "lucide-react";
 
 export default function HomePage() {
   const textbooks = [
@@ -59,33 +64,32 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#2c5f7c] to-[#3d7a9a]">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
-      <header className="border-b border-white/10 bg-[#1e3a4c]/50 backdrop-blur-sm">
+      <header className="border-b border-white/10 bg-gradient-to-r from-[#2c5f7c] to-[#3d7a9a]">
         <div className="container mx-auto flex items-center justify-between px-6 py-4">
           <h1 className="text-xl font-semibold text-white">OpenED AI</h1>
           <Select defaultValue="student">
-            <SelectTrigger className="w-[180px] border-white/30 bg-transparent text-white hover:bg-white/10">
+            <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white  [&_svg:not([class*='text-'])]:text-primary-foregroundhover:bg-white/10">
               <SelectValue placeholder="Select mode" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="student">Student</SelectItem>
-              <SelectItem value="teacher">Teacher</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="student">Mode: Student</SelectItem>
+              <SelectItem value="instructor">Mode: Instructor</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-6 py-16">
+      <main className="container mx-auto flex-1 px-6 py-16">
         <div className="mx-auto max-w-6xl">
           {/* Hero Section */}
           <div className="mb-12 text-center">
-            <h2 className="mb-3 text-5xl font-bold text-white">
+            <h2 className="mb-3 text-5xl font-bold text-gray-900">
               BCcampus Textbook Catalogue
             </h2>
-            <p className="text-lg text-white/90">
+            <p className="text-lg text-gray-600">
               Select a textbook to get started
             </p>
           </div>
@@ -96,7 +100,7 @@ export default function HomePage() {
             <Input
               type="search"
               placeholder="Search by Title or Author"
-              className="h-12 bg-white pl-10 text-base shadow-sm"
+              className="h-12 bg-input border pl-10 text-base shadow-sm"
             />
           </div>
 
@@ -105,15 +109,27 @@ export default function HomePage() {
             {textbooks.map((textbook) => (
               <Card
                 key={textbook.id}
-                className="transition-shadow hover:shadow-lg"
+                className="flex flex-col items-start p-[10px] transition-shadow hover:shadow-lg"
               >
-                <CardHeader>
-                  <CardTitle className="text-base leading-tight">
+                <CardHeader className="flex-1 p-0 w-full">
+                  <CardTitle className="line-clamp-3 text-base leading-tight text-left">
                     {textbook.title}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-blue-600">By {textbook.author}</p>
+                <CardContent className="p-0 w-full">
+                  <p className="truncate text-sm text-primary text-left">
+                    By {
+                      (() => {
+                        const authors = textbook.author;
+                        if (authors.length === 1) return authors[0];
+                        if (authors.length === 2) return `${authors[0]} & ${authors[1]}`;
+                        return authors.slice(0, -1).join(", ") + " & " + authors[authors.length - 1];
+                      })()
+                    }
+                  </p>
+                </CardContent>
+                <CardContent className="p-0 w-full">
+                  <p className="px-[10px] py-[5px] bg-primary text-primary-foreground border rounded-xl w-fit text-left">{textbook.category}</p>
                 </CardContent>
               </Card>
             ))}
