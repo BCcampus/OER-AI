@@ -347,6 +347,131 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: POST
         type: aws_proxy
+    put:
+      tags:
+        - User
+      summary: Update a specific textbook
+      operationId: update_textbook
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Textbook UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                authors:
+                  type: array
+                  items:
+                    type: string
+                license:
+                  type: string
+                source_url:
+                  type: string
+                publisher:
+                  type: string
+                year:
+                  type: integer
+                summary:
+                  type: string
+                language:
+                  type: string
+                level:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        "200":
+          description: Textbook updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  authors:
+                    type: array
+                    items:
+                      type: string
+                  license:
+                    type: string
+                  source_url:
+                    type: string
+                  publisher:
+                    type: string
+                  year:
+                    type: integer
+                  summary:
+                    type: string
+                  language:
+                    type: string
+                  level:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  metadata:
+                    type: object
+        "404":
+          description: Textbook not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    delete:
+      tags:
+        - User
+      summary: Delete a specific textbook
+      operationId: delete_textbook
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Textbook UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Textbook deleted successfully
+        "404":
+          description: Textbook not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
 
   /user/exampleEndpoint:
     options:
