@@ -30,6 +30,20 @@ exports.handler = async (event) => {
         data = "Example endpoint invoked";
         response.body = JSON.stringify(data);
         break;
+      case "POST /user_sessions":
+        const sessionId = crypto.randomUUID();
+        const query = `
+          INSERT INTO user_sessions (session_id, created_at, last_active_at)
+          VALUES ($1, NOW(), NOW())
+          RETURNING id, session_id, created_at
+        `;
+        const result = await sqlConnection.query(query, [sessionId]);
+        data = {
+          sessionId: result.rows[0].session_id,
+          userSessionId: result.rows[0].id
+        };
+        response.body = JSON.stringify(data);
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }
