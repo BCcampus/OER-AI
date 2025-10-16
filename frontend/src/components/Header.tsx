@@ -12,7 +12,7 @@ export default function Header() {
       <div className="container mx-auto flex items-center justify-between px-6 py-4">
         <h1 className="text-xl font-semibold text-white">OpenED AI</h1>
         <Select defaultValue="student">
-          <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white  [&_svg:not([class*='text-'])]:text-primary-foregroundhover:bg-white/10">
+          <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white  [&_svg:not([class*='text-'])]:text-primary-foreground hover:bg-white/10">
             <SelectValue placeholder="Select mode" />
           </SelectTrigger>
           <SelectContent>
