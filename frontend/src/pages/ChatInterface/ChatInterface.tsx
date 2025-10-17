@@ -28,7 +28,7 @@ export default function AIChatPage() {
     <div className="flex flex-col min-h-screen bg-background">
       {/* Header */}
       <Header />
-      <div className="pt-[70px] flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <StudentSideBar
           textbookTitle={textbookTitle}
