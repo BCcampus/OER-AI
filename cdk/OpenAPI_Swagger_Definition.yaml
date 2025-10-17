@@ -623,6 +623,150 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /faq/{id}:
+    <<: *commonOptions
+    get:
+      tags:
+        - User
+      summary: Get a specific FAQ entry by ID
+      operationId: get_faq_by_id
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: FAQ entry UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: FAQ entry details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  question_text:
+                    type: string
+                  answer_text:
+                    type: string
+                  usage_count:
+                    type: integer
+                  last_used_at:
+                    type: string
+                    format: date-time
+                  cached_at:
+                    type: string
+                    format: date-time
+        "404":
+          description: FAQ entry not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    put:
+      tags:
+        - User
+      summary: Update a specific FAQ entry
+      operationId: update_faq
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: FAQ entry UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question_text:
+                  type: string
+                answer_text:
+                  type: string
+      responses:
+        "200":
+          description: FAQ entry updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  question_text:
+                    type: string
+                  answer_text:
+                    type: string
+                  usage_count:
+                    type: integer
+                  last_used_at:
+                    type: string
+                    format: date-time
+                  cached_at:
+                    type: string
+                    format: date-time
+        "404":
+          description: FAQ entry not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    delete:
+      tags:
+        - User
+      summary: Delete a specific FAQ entry
+      operationId: delete_faq
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: FAQ entry UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: FAQ entry deleted successfully
+        "404":
+          description: FAQ entry not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
   /textbooks/{id}/chat_sessions:
     <<: *commonOptions
     get:
@@ -1574,6 +1718,81 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: POST
         type: aws_proxy
+    post:
+      tags:
+        - User
+      summary: Create document chunk for textbook
+      operationId: create_textbook_chunk
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Textbook UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chunk_text
+              properties:
+                section_id:
+                  type: string
+                  format: uuid
+                media_item_id:
+                  type: string
+                  format: uuid
+                chunk_text:
+                  type: string
+                chunk_meta:
+                  type: object
+      responses:
+        "201":
+          description: Document chunk created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  section_id:
+                    type: string
+                    format: uuid
+                  media_item_id:
+                    type: string
+                    format: uuid
+                  chunk_text:
+                    type: string
+                  chunk_meta:
+                    type: object
+                  created_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: Invalid request
+        "404":
+          description: Textbook not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
 
   /chunks/{id}:
     <<: *commonOptions
@@ -1619,6 +1838,107 @@ paths:
                   created_at:
                     type: string
                     format: date-time
+        "404":
+          description: Chunk not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    put:
+      tags:
+        - User
+      summary: Update a specific document chunk
+      operationId: update_chunk
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Chunk UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                section_id:
+                  type: string
+                  format: uuid
+                media_item_id:
+                  type: string
+                  format: uuid
+                chunk_text:
+                  type: string
+                chunk_meta:
+                  type: object
+      responses:
+        "200":
+          description: Document chunk updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  section_id:
+                    type: string
+                    format: uuid
+                  media_item_id:
+                    type: string
+                    format: uuid
+                  chunk_text:
+                    type: string
+                  chunk_meta:
+                    type: object
+                  created_at:
+                    type: string
+                    format: date-time
+        "404":
+          description: Chunk not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${textbookFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    delete:
+      tags:
+        - User
+      summary: Delete a specific document chunk
+      operationId: delete_chunk
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Chunk UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Document chunk deleted successfully
         "404":
           description: Chunk not found
         "401":

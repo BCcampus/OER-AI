@@ -61,6 +61,105 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
+      case "GET /faq/{id}":
+        const faqId = event.pathParameters?.id;
+        if (!faqId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "FAQ ID is required" });
+          break;
+        }
+        
+        const faq = await sqlConnection`
+          SELECT id, question_text, answer_text, usage_count, last_used_at, cached_at
+          FROM faq_cache
+          WHERE id = ${faqId}
+        `;
+        
+        if (faq.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "FAQ entry not found" });
+          break;
+        }
+        
+        data = faq[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "PUT /faq/{id}":
+        const putFaqId = event.pathParameters?.id;
+        if (!putFaqId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "FAQ ID is required" });
+          break;
+        }
+        
+        const updateData = parseBody(event.body);
+        const { question_text: updateQuestion, answer_text: updateAnswer } = updateData;
+        
+        const updateFields = [];
+        const updateValues = [];
+        
+        if (updateQuestion) {
+          updateFields.push('question_text = $' + (updateValues.length + 1));
+          updateValues.push(updateQuestion);
+          updateFields.push('normalized_question = $' + (updateValues.length + 1));
+          updateValues.push(updateQuestion.toLowerCase().trim());
+        }
+        
+        if (updateAnswer) {
+          updateFields.push('answer_text = $' + (updateValues.length + 1));
+          updateValues.push(updateAnswer);
+        }
+        
+        if (updateFields.length === 0) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "No valid fields to update" });
+          break;
+        }
+        
+        updateValues.push(putFaqId);
+        const updateQuery = `
+          UPDATE faq_cache 
+          SET ${updateFields.join(', ')}
+          WHERE id = $${updateValues.length}
+          RETURNING id, question_text, answer_text, usage_count, last_used_at, cached_at
+        `;
+        
+        const updatedFaq = await sqlConnection.unsafe(updateQuery, updateValues);
+        
+        if (updatedFaq.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "FAQ entry not found" });
+          break;
+        }
+        
+        data = updatedFaq[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "DELETE /faq/{id}":
+        const deleteFaqId = event.pathParameters?.id;
+        if (!deleteFaqId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "FAQ ID is required" });
+          break;
+        }
+        
+        const deleteResult = await sqlConnection`
+          DELETE FROM faq_cache
+          WHERE id = ${deleteFaqId}
+        `;
+        
+        if (deleteResult.count === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "FAQ entry not found" });
+          break;
+        }
+        
+        response.statusCode = 204;
+        response.body = '';
+        break;
+        
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

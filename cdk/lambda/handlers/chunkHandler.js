@@ -74,6 +74,116 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
+      case "POST /textbooks/{id}/chunks":
+        const postChunkTextbookId = event.pathParameters?.id;
+        if (!postChunkTextbookId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Textbook ID is required" });
+          break;
+        }
+        
+        const chunkData = parseBody(event.body);
+        const { section_id, media_item_id, chunk_text, chunk_meta } = chunkData;
+        if (!chunk_text) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "chunk_text is required" });
+          break;
+        }
+        
+        const newChunk = await sqlConnection`
+          INSERT INTO document_chunks (textbook_id, section_id, media_item_id, chunk_text, chunk_meta)
+          VALUES (${postChunkTextbookId}, ${section_id || null}, ${media_item_id || null}, ${chunk_text}, ${chunk_meta || {}})
+          RETURNING id, textbook_id, section_id, media_item_id, chunk_text, chunk_meta, created_at
+        `;
+        
+        response.statusCode = 201;
+        data = newChunk[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "PUT /chunks/{id}":
+        const putChunkId = event.pathParameters?.id;
+        if (!putChunkId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Chunk ID is required" });
+          break;
+        }
+        
+        const updateChunkData = parseBody(event.body);
+        const { section_id: updateSectionId, media_item_id: updateMediaItemId, chunk_text: updateChunkText, chunk_meta: updateChunkMeta } = updateChunkData;
+        
+        const updateFields = [];
+        const updateValues = [];
+        
+        if (updateSectionId !== undefined) {
+          updateFields.push('section_id = $' + (updateValues.length + 1));
+          updateValues.push(updateSectionId);
+        }
+        
+        if (updateMediaItemId !== undefined) {
+          updateFields.push('media_item_id = $' + (updateValues.length + 1));
+          updateValues.push(updateMediaItemId);
+        }
+        
+        if (updateChunkText) {
+          updateFields.push('chunk_text = $' + (updateValues.length + 1));
+          updateValues.push(updateChunkText);
+        }
+        
+        if (updateChunkMeta !== undefined) {
+          updateFields.push('chunk_meta = $' + (updateValues.length + 1));
+          updateValues.push(updateChunkMeta);
+        }
+        
+        if (updateFields.length === 0) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "No valid fields to update" });
+          break;
+        }
+        
+        updateValues.push(putChunkId);
+        const updateQuery = `
+          UPDATE document_chunks 
+          SET ${updateFields.join(', ')}
+          WHERE id = $${updateValues.length}
+          RETURNING id, textbook_id, section_id, media_item_id, chunk_text, chunk_meta, created_at
+        `;
+        
+        const updatedChunk = await sqlConnection.unsafe(updateQuery, updateValues);
+        
+        if (updatedChunk.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Chunk not found" });
+          break;
+        }
+        
+        data = updatedChunk[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "DELETE /chunks/{id}":
+        const deleteChunkId = event.pathParameters?.id;
+        if (!deleteChunkId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Chunk ID is required" });
+          break;
+        }
+        
+        const deleteResult = await sqlConnection`
+          DELETE FROM document_chunks
+          WHERE id = ${deleteChunkId}
+        `;
+        
+        if (deleteResult.count === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Chunk not found" });
+          break;
+        }
+        
+        response.statusCode = 204;
+        response.body = '';
+        break;
+        
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }
