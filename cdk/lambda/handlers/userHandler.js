@@ -173,6 +173,144 @@ exports.handler = async (event) => {
         response.body = "";
         break;
         
+      case "GET /user_sessions/{session_id}/analytics":
+        const analyticsSessionId = event.pathParameters?.session_id;
+        if (!analyticsSessionId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Session ID is required" });
+          break;
+        }
+        
+        const analyticsLimit = Math.min(parseInt(event.queryStringParameters?.limit) || 20, 100);
+        const analyticsOffset = parseInt(event.queryStringParameters?.offset) || 0;
+        
+        const analyticsResult = await sqlConnection`
+          SELECT 
+            id, user_session_id, event_type, properties, created_at,
+            COUNT(*) OVER() as total_count
+          FROM analytics_events
+          WHERE user_session_id = ${analyticsSessionId}
+          ORDER BY created_at DESC
+          LIMIT ${analyticsLimit} OFFSET ${analyticsOffset}
+        `;
+        
+        const analyticsTotal = analyticsResult.length > 0 ? parseInt(analyticsResult[0].total_count) : 0;
+        const analytics = analyticsResult.map(({total_count, ...event}) => event);
+        
+        data = {
+          analytics,
+          pagination: {
+            limit: analyticsLimit,
+            offset: analyticsOffset,
+            total: analyticsTotal,
+            hasMore: analyticsOffset + analyticsLimit < analyticsTotal
+          }
+        };
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "POST /user_sessions/{session_id}/analytics":
+        const createAnalyticsSessionId = event.pathParameters?.session_id;
+        if (!createAnalyticsSessionId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Session ID is required" });
+          break;
+        }
+        
+        const analyticsData = parseBody(event.body);
+        const { event_type, properties } = analyticsData;
+        
+        if (!event_type) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "event_type is required" });
+          break;
+        }
+        
+        const newAnalytics = await sqlConnection`
+          INSERT INTO analytics_events (user_session_id, event_type, properties)
+          VALUES (${createAnalyticsSessionId}, ${event_type}, ${properties || {}})
+          RETURNING id, user_session_id, event_type, properties, created_at
+        `;
+        
+        response.statusCode = 201;
+        data = newAnalytics[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "GET /analytics/{id}":
+        const analyticsId = event.pathParameters?.id;
+        if (!analyticsId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Analytics ID is required" });
+          break;
+        }
+        
+        const analyticsEvent = await sqlConnection`
+          SELECT id, user_session_id, event_type, properties, created_at
+          FROM analytics_events
+          WHERE id = ${analyticsId}
+        `;
+        
+        if (analyticsEvent.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+        
+        data = analyticsEvent[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "PUT /analytics/{id}":
+        const updateAnalyticsId = event.pathParameters?.id;
+        if (!updateAnalyticsId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Analytics ID is required" });
+          break;
+        }
+        
+        const updateAnalyticsData = parseBody(event.body);
+        const { event_type: updateEventType, properties: updateProperties } = updateAnalyticsData;
+        
+        const updatedAnalytics = await sqlConnection`
+          UPDATE analytics_events 
+          SET event_type = ${updateEventType}, properties = ${updateProperties || {}}
+          WHERE id = ${updateAnalyticsId}
+          RETURNING id, user_session_id, event_type, properties, created_at
+        `;
+        
+        if (updatedAnalytics.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+        
+        data = updatedAnalytics[0];
+        response.body = JSON.stringify(data);
+        break;
+        
+      case "DELETE /analytics/{id}":
+        const deleteAnalyticsId = event.pathParameters?.id;
+        if (!deleteAnalyticsId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Analytics ID is required" });
+          break;
+        }
+        
+        const deletedAnalytics = await sqlConnection`
+          DELETE FROM analytics_events WHERE id = ${deleteAnalyticsId} RETURNING id
+        `;
+        
+        if (deletedAnalytics.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+        
+        response.statusCode = 204;
+        response.body = "";
+        break;
+        
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }
