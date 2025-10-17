@@ -2399,6 +2399,393 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /textbooks/{id}/shared_prompts:
+    <<: *commonOptions
+    get:
+      tags:
+        - User
+      summary: Get shared user prompts for a textbook
+      operationId: get_textbook_shared_prompts
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Textbook UUID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Number of prompts to return (default 20, max 100)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of prompts to skip (default 0)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: List of shared user prompts for textbook
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prompts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        title:
+                          type: string
+                        prompt_text:
+                          type: string
+                        owner_session_id:
+                          type: string
+                          format: uuid
+                        owner_user_id:
+                          type: string
+                          format: uuid
+                        textbook_id:
+                          type: string
+                          format: uuid
+                        visibility:
+                          type: string
+                          enum: ['private', 'org', 'public']
+                        tags:
+                          type: array
+                          items:
+                            type: string
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+                        metadata:
+                          type: object
+                  pagination:
+                    type: object
+                    properties:
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                      total:
+                        type: integer
+                      hasMore:
+                        type: boolean
+        "400":
+          description: Invalid parameters
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sharedUserPromptFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    post:
+      tags:
+        - User
+      summary: Create shared user prompt for textbook
+      operationId: create_textbook_shared_prompt
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Textbook UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - prompt_text
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                prompt_text:
+                  type: string
+                owner_session_id:
+                  type: string
+                  format: uuid
+                owner_user_id:
+                  type: string
+                  format: uuid
+                visibility:
+                  type: string
+                  enum: ['private', 'org', 'public']
+                  default: 'public'
+                tags:
+                  type: array
+                  items:
+                    type: string
+                metadata:
+                  type: object
+      responses:
+        "201":
+          description: Shared user prompt created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  prompt_text:
+                    type: string
+                  owner_session_id:
+                    type: string
+                    format: uuid
+                  owner_user_id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  visibility:
+                    type: string
+                    enum: ['private', 'org', 'public']
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  metadata:
+                    type: object
+        "400":
+          description: Invalid request
+        "404":
+          description: Textbook not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sharedUserPromptFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+      x-amazon-apigateway-request-validator: all
+
+  /shared_prompts/{id}:
+    <<: *commonOptions
+    get:
+      tags:
+        - User
+      summary: Get a specific shared user prompt by ID
+      operationId: get_shared_prompt_by_id
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Shared prompt UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Shared user prompt details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  prompt_text:
+                    type: string
+                  owner_session_id:
+                    type: string
+                    format: uuid
+                  owner_user_id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  visibility:
+                    type: string
+                    enum: ['private', 'org', 'public']
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  metadata:
+                    type: object
+        "404":
+          description: Prompt not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sharedUserPromptFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    put:
+      tags:
+        - User
+      summary: Update a specific shared user prompt
+      operationId: update_shared_prompt
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Shared prompt UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                prompt_text:
+                  type: string
+                visibility:
+                  type: string
+                  enum: ['private', 'org', 'public']
+                tags:
+                  type: array
+                  items:
+                    type: string
+                metadata:
+                  type: object
+      responses:
+        "200":
+          description: Shared user prompt updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  prompt_text:
+                    type: string
+                  owner_session_id:
+                    type: string
+                    format: uuid
+                  owner_user_id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  visibility:
+                    type: string
+                    enum: ['private', 'org', 'public']
+                  tags:
+                    type: array
+                    items:
+                      type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  metadata:
+                    type: object
+        "404":
+          description: Prompt not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sharedUserPromptFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+    delete:
+      tags:
+        - User
+      summary: Delete a specific shared user prompt
+      operationId: delete_shared_prompt
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Shared prompt UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Shared user prompt deleted successfully
+        "404":
+          description: Prompt not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sharedUserPromptFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
   /user/exampleEndpoint:
     options:
       summary: CORS support
