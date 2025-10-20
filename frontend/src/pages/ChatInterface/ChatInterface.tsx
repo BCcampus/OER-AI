@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { CornerUpRight, Send, ChevronDown, LibraryBig } from "lucide-react";
+import { Send, ChevronDown, LibraryBig } from "lucide-react";
+import PromptCard from "./PromptCard";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
-import StudentSideBar from "./StudentSideBar";
+import StudentSideBar from "../../components/ChatInterface/StudentSideBar";
 import { useLocation } from "react-router";
 
 type Message = {
@@ -65,7 +66,7 @@ export default function AIChatPage() {
       return (
         <div className="flex justify-end">
           <Card key={m.id} className="py-[10px] w-[90%]">
-            <CardContent className="px-[10px] text-sm">
+            <CardContent className="px-[10px] text-sm lg:text-md">
               <p>{m.text}</p>
             </CardContent>
           </Card>
@@ -139,17 +140,7 @@ export default function AIChatPage() {
             {/* Prompt Suggestions */}
             <div className="flex gap-3 mb-6">
               {prompts.map((prompt, index) => (
-                <Card
-                  key={index}
-                  className="flex-1 p-[10px] cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <div className="relative h-full flex flex-col items-start">
-                    <p className="text-md text-muted-foreground mb-auto">
-                      {prompt}
-                    </p>
-                    <CornerUpRight className="absolute bottom-0 right-0 h-4 w-4 text-muted-foreground" />
-                  </div>
-                </Card>
+                <PromptCard key={index} text={prompt} />
               ))}
             </div>
 
