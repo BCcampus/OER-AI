@@ -68,12 +68,6 @@ const handleError = (error, response) => {
   response.body = JSON.stringify(error.message);
 };
 
-// Initialize connection during Lambda cold start (when container first starts)
-// This improves performance for subsequent invocations (warm starts)
-(async () => {
-  await initConnection();
-})();
-
 /**
  * Main Lambda handler function
  * @param {Object} event - AWS Lambda event object containing HTTP request data
@@ -82,7 +76,8 @@ const handleError = (error, response) => {
 exports.handler = async (event) => {
   const response = createResponse();
   
-  // Ensure database connection is ready (fallback for edge cases)
+  // Ensure database connection is ready
+  await initConnection();
   await initConnection();
 
   let data; // Variable to store response data

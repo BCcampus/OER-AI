@@ -56,15 +56,13 @@ const handleError = (error, response) => {
   response.body = JSON.stringify(error.message);
 };
 
-(async () => {
-  await initConnection();
-})();
-
 exports.handler = async (event) => {
   const response = createResponse();
   let data;
   
   try {
+    // Ensure connection is initialized before proceeding
+    await initConnection();
     const pathData = event.httpMethod + " " + event.resource;
     
     switch (pathData) {
