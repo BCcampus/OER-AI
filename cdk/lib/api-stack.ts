@@ -620,7 +620,7 @@ export class ApiGatewayStack extends cdk.Stack {
       `${id}-user-authorization-api-gateway`,
       {
         runtime: lambda.Runtime.NODEJS_20_X,
-        code: lambda.Code.fromAsset("lambda/userAuthorizerFunction"),
+        code: lambda.Code.fromAsset("lambda/authorization"),
         handler: "userAuthorizerFunction.handler",
         timeout: Duration.seconds(300),
         memorySize: 256,
