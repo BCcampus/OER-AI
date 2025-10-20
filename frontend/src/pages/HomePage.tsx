@@ -79,7 +79,7 @@ export default function HomePage() {
   }, [userSearch]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="pt-[70px] flex min-h-screen flex-col bg-background">
       <Header />
 
       {/* Main Content */}
