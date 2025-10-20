@@ -4,6 +4,12 @@ import { Send, ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "./PromptCard";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import Header from "@/components/Header";
 import StudentSideBar from "../../components/ChatInterface/StudentSideBar";
 import { useLocation } from "react-router";
@@ -29,10 +35,21 @@ export default function AIChatPage() {
     "Summarize a Chapter",
     "Define and explain a term",
     "Generate an example problem",
+    "Explain a concept in simple terms",
+    "Create practice questions",
+    "Compare and contrast topics",
+    "Provide real-world applications",
+    "Break down a complex formula",
+    "Suggest study strategies",
+    "Quiz me on key concepts",
+    "Create a study guide outline",
+    "Explain with analogies",
   ];
 
   // chat state
   const [messages, setMessages] = useState<Message[]>([]);
+  const [seeMore, setSeeMore] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
 
   function sendMessage() {
     const text = message.trim();
@@ -66,7 +83,7 @@ export default function AIChatPage() {
       return (
         <div className="flex justify-end">
           <Card key={m.id} className="py-[10px] w-[90%]">
-            <CardContent className="px-[10px] text-sm lg:text-md">
+            <CardContent className="px-[10px] text-sm lg:text-md break-words">
               <p>{m.text}</p>
             </CardContent>
           </Card>
@@ -75,8 +92,8 @@ export default function AIChatPage() {
     } else {
       return (
         <div className="flex justify-start">
-          <Card key={m.id} className="py-[10px] w-fit bg-transparent border-none shadow-none">
-            <CardContent className="px-[10px] text-sm">
+          <Card key={m.id} className="py-[10px] w-full bg-transparent border-none shadow-none">
+            <CardContent className="px-[10px] text-sm break-words">
               <p>{m.text}</p>
             </CardContent>
           </Card>
@@ -136,17 +153,21 @@ export default function AIChatPage() {
               </Button>
             </div>
 
-            {/* TODO: Remove prompt suggestions when there are messages */}
             {/* Prompt Suggestions */}
-            <div className="flex gap-3 mb-6">
-              {prompts.map((prompt, index) => (
-                <PromptCard key={index} text={prompt} />
-              ))}
-            </div>
+            {(messages.length === 0 || seeMore) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                {prompts.slice(0, messages.length === 0 && !seeMore ? 3 : 12).map((prompt, index) => (
+                  <PromptCard key={index} text={prompt} onClick={() => {
+                    setMessage(prompt);
+                  }} />
+                ))}
+              </div>
+            )}
 
             {/* Prompt Options*/}
-            <div className="w-full flex gap-4 justify-end items-center">
+            <div className="w-full gap-4 flex justify-end items-center">
               <Button
+                onClick={() => setShowLibrary(true)}
                 variant={"link"}
                 className="cursor-pointer gap-2 text-sm font-normal text-muted-foreground hover:text-gray-900 transition-colors"
               >
@@ -154,16 +175,38 @@ export default function AIChatPage() {
                 <LibraryBig className="h-4 w-4" />
               </Button>
               <Button
+                onClick={() => setSeeMore(!seeMore)}
                 variant={"link"}
                 className="cursor-pointer gap-2 text-sm font-normal text-muted-foreground hover:text-gray-900 transition-colors"
               >
-                See more prompts
-                <ChevronDown className="h-4 w-4" />
+                {seeMore ? 'Show less' : 'See more prompts'}
+                <ChevronDown className={`h-4 w-4 transition-transform ${seeMore ? 'rotate-180' : ''}`} />
               </Button>
             </div>
           </div>
         </main>
       </div>
+
+      {/* Prompt Library Modal */}
+      <Dialog open={showLibrary} onOpenChange={setShowLibrary}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Prompt Library</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+            {prompts.map((prompt, index) => (
+              <PromptCard 
+                key={index} 
+                text={prompt} 
+                onClick={() => {
+                  setMessage(prompt);
+                  setShowLibrary(false);
+                }} 
+              />
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
