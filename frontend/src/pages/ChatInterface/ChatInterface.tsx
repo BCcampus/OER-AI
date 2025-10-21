@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import PromptLibraryModal from "./PromptLibraryModal";
 import Header from "@/components/Header";
 import StudentSideBar from "../../components/ChatInterface/StudentSideBar";
+import { SidebarProvider } from "../../components/ChatInterface/SidebarContext";
 import { useLocation } from "react-router";
 
 type Message = {
@@ -83,13 +84,14 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <Header />
-      <div className="pt-[70px] flex-1 flex">
-        <StudentSideBar
-          textbookTitle={textbookTitle}
-          textbookAuthor={textbookAuthor}
-        />
+    <SidebarProvider>
+      <div className="flex flex-col min-h-screen bg-background">
+        <Header />
+        <div className="pt-[70px] flex-1 flex">
+          <StudentSideBar
+            textbookTitle={textbookTitle}
+            textbookAuthor={textbookAuthor}
+          />
 
         <main
           className={`md:ml-64 flex flex-col flex-1 items-center justify-center`}
@@ -196,5 +198,6 @@ export default function AIChatPage() {
         </main>
       </div>
     </div>
+    </SidebarProvider>
   );
 }

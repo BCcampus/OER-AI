@@ -1,8 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-
-import { useState } from "react";
-import { Menu } from "lucide-react";
+import { useSidebar } from "./SidebarContext";
 
 type StudentSideBarProps = {
   textbookTitle: string;
@@ -13,7 +11,7 @@ export default function StudentSideBar({
   textbookTitle,
   textbookAuthor,
 }: StudentSideBarProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { mobileOpen, setMobileOpen } = useSidebar();
 
   const SidebarContent = () => (
     <>
@@ -53,27 +51,14 @@ export default function StudentSideBar({
 
   return (
     <>
-      {/* mobile men toggle button  */}
-      {!mobileOpen && (
-        <div className="md:hidden fixed left-1 z-50">
-          <button
-            className="p-2 rounded-md bg-white/10"
-            aria-label="Open menu"
-            onClick={() => setMobileOpen(true)}
-          >
-            <Menu className="h-5 w-5 text-black" />
-          </button>
-        </div>
-      )}
-
-      {/* Desktop sidebar (reuses SidebarContent) */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:block fixed left-0 p-[10px] h-screen w-64 flex-shrink-0 border bg-muted overflow-auto px-4">
         <SidebarContent />
       </aside>
 
-      {/* Mobile overlay */}
+      {/* Mobile sidebar */}
       <div
-        className={`md:hidden fixed inset-0 z-40 transition-opacity ${
+        className={`md:hidden pt-[10px] fixed inset-0 z-40 transition-opacity ${
           mobileOpen ? "visible" : "pointer-events-none invisible"
         }`}
         aria-hidden={!mobileOpen}
