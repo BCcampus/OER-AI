@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Send, ChevronDown, LibraryBig } from "lucide-react";
+import { ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
