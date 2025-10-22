@@ -131,7 +131,6 @@ def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, conn
         for doc in docs:
             if hasattr(doc, "metadata"):
                 source = doc.metadata.get("source", "")
-                page = doc.metadata.get("page", "")
                 if source and source not in sources_used:
                     source_entry = f"{source}"
                     if page:
