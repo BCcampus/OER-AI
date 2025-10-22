@@ -35,7 +35,7 @@ def get_textbook_retriever(llm, textbook_id: str, vectorstore_config_dict: Dict[
         conn = psycopg2.connect(
             dbname=vectorstore_config_dict['dbname'],
             user=vectorstore_config_dict['user'],
-            password="*********",  # Password masked for security
+            password=vectorstore_config_dict['password'],
             host=vectorstore_config_dict['host'],
             port=int(vectorstore_config_dict['port'])
         )
