@@ -7,11 +7,17 @@ type PromptCardProps = {
   className?: string;
 };
 
-export default function PromptCard({title, onClick, className }: PromptCardProps) {
+export default function PromptCard({
+  title,
+  onClick,
+  className,
+}: PromptCardProps) {
   return (
     <Card
       onClick={onClick}
-      className={`flex-1 p-[10px] cursor-pointer hover:bg-gray-50 transition-colors ${className ?? ""}`}
+      className={`flex-1 p-[10px] cursor-pointer hover:bg-gray-50 transition-colors ${
+        className ?? ""
+      }`}
     >
       <div className="relative h-full flex flex-col items-start">
         <p className="text-md text-muted-foreground mb-auto">{title}</p>
