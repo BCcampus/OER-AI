@@ -26,7 +26,7 @@ export default function PromptLibraryModal({
 }: PromptLibraryModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="w-[90vw] sm:w-fit max-w-3xl sm:max-w-5xl max-h-[80vh] overflow-y-auto">
         <Tabs className="flex flex-col gap-4">
           <div className="flex w-full justify-center">
             <TabsList>
