@@ -3,7 +3,6 @@ import { Send, ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
 import Header from "@/components/Header";
@@ -173,26 +172,12 @@ export default function AIChatPage() {
               <div>
                 {/* Input Area */}
                 <div className="relative mb-6">
-                  <Textarea
+                  <AiChatInput
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage();
-                      }
-                    }}
+                    onChange={(val: string) => setMessage(val)}
                     placeholder={`Ask anything about ${textbookTitle}`}
-                    className="bg-input !border-[var(--border)] h-[120px] pr-12 resize-none text-sm"
+                    onSend={sendMessage}
                   />
-                  <Button
-                    onClick={sendMessage}
-                    size="icon"
-                    variant="link"
-                    className="cursor-pointer absolute bottom-3 right-3 h-8 w-8 text-muted-foreground hover:text-gray-900 transition-colors"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
                 </div>
 
                 {/* Prompt Suggestions */}
