@@ -84,5 +84,6 @@ export class AmplifyStack extends cdk.Stack {
     });
 
     amplifyApp.addBranch("main");
+    amplifyApp.addBranch("frontend");
   }
 }
