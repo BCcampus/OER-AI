@@ -37,7 +37,7 @@ export default function AIChatPage() {
     ? navTextbook.author.join(", ")
     : "OpenStax";
 
-  const [prompts, setPrompts] = useState<string[]>([]);
+  const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
 
   // chat state
@@ -51,25 +51,25 @@ export default function AIChatPage() {
       try {
         const response = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/prompt_templates`);
         const data = await response.json();
-        const promptNames = data.templates?.map((template: PromptTemplate) => template.name) || [];
-        setPrompts(promptNames.length > 0 ? promptNames : [
-          "Summarize a Chapter",
-          "Define and explain a term",
-          "Generate an example problem",
-          "Explain a concept in simple terms",
-          "Create practice questions",
-          "Compare and contrast topics"
+        const templates = data.templates || [];
+        setPrompts(templates.length > 0 ? templates : [
+          { id: '1', name: "Summarize a Chapter", description: "Provide a concise summary of a specific chapter", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '2', name: "Define and explain a term", description: "Give a clear definition and explanation of a concept or term", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '3', name: "Generate an example problem", description: "Create a practice problem with step-by-step solution", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '4', name: "Explain a concept in simple terms", description: "Break down complex concepts into easy-to-understand language", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '5', name: "Create practice questions", description: "Generate quiz questions to test understanding", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '6', name: "Compare and contrast topics", description: "Analyze similarities and differences between related concepts", type: 'RAG', visibility: 'public', created_at: '' }
         ]);
       } catch (error) {
         console.error('Error fetching prompt templates:', error);
         // Fallback to default prompts
         setPrompts([
-          "Summarize a Chapter",
-          "Define and explain a term",
-          "Generate an example problem",
-          "Explain a concept in simple terms",
-          "Create practice questions",
-          "Compare and contrast topics"
+          { id: '1', name: "Summarize a Chapter", description: "Provide a concise summary of a specific chapter", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '2', name: "Define and explain a term", description: "Give a clear definition and explanation of a concept or term", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '3', name: "Generate an example problem", description: "Create a practice problem with step-by-step solution", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '4', name: "Explain a concept in simple terms", description: "Break down complex concepts into easy-to-understand language", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '5', name: "Create practice questions", description: "Generate quiz questions to test understanding", type: 'RAG', visibility: 'public', created_at: '' },
+          { id: '6', name: "Compare and contrast topics", description: "Analyze similarities and differences between related concepts", type: 'RAG', visibility: 'public', created_at: '' }
         ]);
       } finally {
         setLoading(false);
@@ -214,10 +214,10 @@ export default function AIChatPage() {
                         .slice(0, messages.length === 0 && !seeMore ? 3 : 12)
                         .map((prompt, index) => (
                           <PromptCard
-                            key={index}
-                            text={prompt}
+                            key={prompt.id || index}
+                            text={prompt.name}
                             onClick={() => {
-                              setMessage(prompt);
+                              setMessage(prompt.description || prompt.name);
                             }}
                           />
                         ))
@@ -254,8 +254,11 @@ export default function AIChatPage() {
             <PromptLibraryModal
               open={showLibrary}
               onOpenChange={setShowLibrary}
-              prompts={prompts}
-              onSelectPrompt={(p) => setMessage(p)}
+              prompts={prompts.map(p => p.name)}
+              onSelectPrompt={(p) => {
+                const template = prompts.find(t => t.name === p);
+                setMessage(template?.description || p);
+              }}
             />
           </main>
         </div>
