@@ -717,7 +717,7 @@ export class ApiGatewayStack extends cdk.Stack {
       this,
       "BedrockLLMParameter",
       {
-        parameterName: `/${id}/RDI/BedrockLLMId`,
+        parameterName: `/${id}/OER/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
         stringValue: "meta.llama3-70b-instruct-v1:0",
       }
@@ -727,7 +727,7 @@ export class ApiGatewayStack extends cdk.Stack {
       this,
       "EmbeddingModelParameter",
       {
-        parameterName: `/${id}/RDI/EmbeddingModelId`,
+        parameterName: `/${id}/OER/EmbeddingModelId`,
         description: "Parameter containing the Embedding Model ID",
         stringValue: "amazon.titan-embed-image-v1",
       }
@@ -808,6 +808,7 @@ export class ApiGatewayStack extends cdk.Stack {
       resources: [
         `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1`,
         `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
+        `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-image-v1`,
         //`arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
       ],
     });

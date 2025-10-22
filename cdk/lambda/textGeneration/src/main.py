@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]  # Secret containing database credentials
 REGION = os.environ["REGION"]  # AWS region
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]  # Database proxy endpoint
-BEDROCK_LLM_ID = os.environ.get("BEDROCK_LLM_ID", "anthropic.claude-3-sonnet-20240229-v1:0")  # LLM model ID
+BEDROCK_LLM_ID = os.environ.get("BEDROCK_LLM_ID", "meta.llama3-70b-instruct-v1:0")  # LLM model ID
 EMBEDDING_MODEL_ID = os.environ.get("EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v1")  # Embedding model ID
 
 # AWS Clients
