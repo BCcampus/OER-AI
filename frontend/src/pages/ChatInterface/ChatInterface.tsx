@@ -9,7 +9,7 @@ import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
 import Header from "@/components/Header";
 import StudentSideBar from "@/components/ChatInterface/StudentSideBar";
 import { SidebarProvider } from "@/components/ChatInterface/SidebarContext";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 type Message = {
   id: string;
@@ -31,12 +31,21 @@ type PromptTemplate = {
 export default function AIChatPage() {
   const [message, setMessage] = useState("");
   const location = useLocation();
+  const navigate = useNavigate();
 
   const navTextbook = location.state?.textbook;
+  const chatSessionId = location.state?.chatSessionId;
   const textbookTitle = navTextbook?.title ?? "Calculus: Volume 3";
   const textbookAuthor = navTextbook?.author
     ? navTextbook.author.join(", ")
     : "OpenStax";
+
+  // Redirect if no chat session ID
+  useEffect(() => {
+    if (!chatSessionId) {
+      navigate('/');
+    }
+  }, [chatSessionId, navigate]);
 
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +189,7 @@ export default function AIChatPage() {
 
   async function sendMessage() {
     const text = message.trim();
-    if (!text) return;
+    if (!text || !chatSessionId) return;
 
     const userMsg: Message = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -194,25 +203,30 @@ export default function AIChatPage() {
     setMessage("");
 
     try {
-      // Generate a temporary chat session ID (in real app, this would come from session creation)
-      const sessionId = "temp-session-id";
-      const textbookId = navTextbook?.id || "temp-textbook-id";
+      // Get fresh token for the request
+      const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+      const { token } = await tokenResponse.json();
 
       const response = await fetch(
         `${
           import.meta.env.VITE_API_ENDPOINT
-        }/chat_sessions/${sessionId}/text_generation`,
+        }/chat_sessions/${chatSessionId}/text_generation`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
-            textbook_id: textbookId,
+            textbook_id: navTextbook.id,
             query: text,
           }),
         }
       );
+
+      if (!response.ok) {
+        throw new Error('Failed to generate response');
+      }
 
       const data = await response.json();
 

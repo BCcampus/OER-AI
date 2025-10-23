@@ -1,5 +1,7 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useNavigate } from "react-router";
+import { useUserSession } from "@/contexts/UserSessionContext";
+import { useState } from "react";
 
 type Textbook = {
   id: string | number;
@@ -18,13 +20,58 @@ function formatAuthors(authors: string[]) {
 
 export default function TextbookCard({ textbook }: { textbook: Textbook }) {
   const navigate = useNavigate();
+  const { userSessionId } = useUserSession();
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+
+  const createChatSession = async () => {
+    if (!userSessionId || isCreatingSession) return;
+    
+    setIsCreatingSession(true);
+    try {
+      // Get public token
+      const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+      const { token } = await tokenResponse.json();
+
+      // Create chat session
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/chat_sessions`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            user_sessions_session_id: userSessionId
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to create chat session');
+      }
+
+      const chatSession = await response.json();
+      
+      // Navigate with both textbook and chat session data
+      navigate(`/textbook/${textbook.id}/chat`, { 
+        state: { 
+          textbook,
+          chatSessionId: chatSession.id 
+        } 
+      });
+    } catch (error) {
+      console.error('Failed to create chat session:', error);
+      // You might want to show an error message to the user here
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
 
   return (
     <Card
       key={textbook.id}
-      onClick={() =>
-        navigate(`/textbook/${textbook.id}/chat`, { state: { textbook } })
-      }
+      onClick={createChatSession}
       className="flex flex-col items-start p-[10px] gap-4 not-odd:transition-shadow hover:shadow-lg cursor-pointer"
     >
       <CardHeader className="flex-1 p-0 w-full">
