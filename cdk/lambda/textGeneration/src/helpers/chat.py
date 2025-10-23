@@ -176,11 +176,10 @@ def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, conn
         logger.info("Invoking LLM to generate response...")
         start_time = time.time()
         result = document_chain.invoke({"context": docs, "input": query})
-        response_text = result.content
         end_time = time.time()
         
         logger.info(f"Response generated in {end_time - start_time:.2f} seconds")
-        logger.info(f"Response length: {len(response_text)} characters")
+        logger.info(f"Response length: {len(result)} characters")
         
         # Extract sources used
         sources_used = []
@@ -197,7 +196,7 @@ def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, conn
         logger.info(f"Sources used: {sources_used}")
         
         return {
-            "response": response_text,
+            "response": result,
             "sources_used": sources_used
         }
         
