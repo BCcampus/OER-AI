@@ -150,6 +150,7 @@ def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, conn
         
         # Get custom prompt if available
         #custom_prompt = get_textbook_prompt(textbook_id, connection)
+        custom_prompt = None
         logger.info(f"Using {'custom' if custom_prompt else 'default'} prompt template")
         
         # Set up system prompt
