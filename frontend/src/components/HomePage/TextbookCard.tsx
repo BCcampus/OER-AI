@@ -21,39 +21,66 @@ function formatAuthors(authors: string[]) {
 export default function TextbookCard({ textbook }: { textbook: Textbook }) {
   const navigate = useNavigate();
   const { userSessionId } = useUserSession();
-  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const createChatSession = async () => {
-    if (!userSessionId || isCreatingSession) return;
+  const getOrCreateChatSession = async () => {
+    if (!userSessionId || isLoading) return;
     
-    setIsCreatingSession(true);
+    setIsLoading(true);
     try {
       // Get public token
       const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+      if (!tokenResponse.ok) throw new Error('Failed to get public token');
       const { token } = await tokenResponse.json();
 
-      // Create chat session
-      const response = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/chat_sessions`,
+      // First check for existing chat sessions for this textbook and user
+      const existingResponse = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/chat_sessions/user/${userSessionId}`,
         {
-          method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            user_sessions_session_id: userSessionId
-          })
+          }
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to create chat session');
+      if (!existingResponse.ok) {
+        throw new Error('Failed to check existing chat sessions');
       }
 
-      const chatSession = await response.json();
-      
-      // Navigate with both textbook and chat session data
+      const existingSessions = await existingResponse.json();
+      let chatSession;
+
+      if (existingSessions && existingSessions.length > 0) {
+        // Use the most recent chat session for this textbook
+        chatSession = existingSessions[0]; // API returns them ordered by created_at DESC
+        console.log('Reusing existing chat session:', chatSession.id);
+      } else {
+        // Create new chat session if none exists
+        console.log('No existing chat session found, creating new one');
+        const createResponse = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/chat_sessions`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              user_sessions_session_id: userSessionId
+            })
+          }
+        );
+
+        if (!createResponse.ok) {
+          throw new Error('Failed to create chat session');
+        }
+
+        chatSession = await createResponse.json();
+        console.log('Created new chat session:', chatSession.id);
+      }
+
+      // Navigate to chat interface with the chat session
       navigate(`/textbook/${textbook.id}/chat`, { 
         state: { 
           textbook,
@@ -61,18 +88,24 @@ export default function TextbookCard({ textbook }: { textbook: Textbook }) {
         } 
       });
     } catch (error) {
-      console.error('Failed to create chat session:', error);
-      // You might want to show an error message to the user here
+      console.error('Failed to get/create chat session:', error);
+      // TODO: Show error toast/message to user
     } finally {
-      setIsCreatingSession(false);
+      setIsLoading(false);
     }
   };
 
   return (
     <Card
       key={textbook.id}
-      onClick={createChatSession}
-      className="flex flex-col items-start p-[10px] gap-4 not-odd:transition-shadow hover:shadow-lg cursor-pointer"
+      onClick={() => {
+        if (!isLoading) {
+          getOrCreateChatSession();
+        }
+      }}
+      className={`flex flex-col items-start p-[10px] gap-4 not-odd:transition-shadow hover:shadow-lg cursor-pointer ${
+        isLoading ? 'opacity-50' : ''
+      }`}
     >
       <CardHeader className="flex-1 p-0 w-full">
         <CardTitle

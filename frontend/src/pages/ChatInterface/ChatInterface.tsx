@@ -10,6 +10,7 @@ import Header from "@/components/Header";
 import StudentSideBar from "@/components/ChatInterface/StudentSideBar";
 import { SidebarProvider } from "@/components/ChatInterface/SidebarContext";
 import { useLocation, useNavigate } from "react-router";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 type Message = {
   id: string;
@@ -29,9 +30,19 @@ type PromptTemplate = {
 };
 
 export default function AIChatPage() {
+  // State
   const [message, setMessage] = useState("");
+  const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [seeMore, setSeeMore] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  // Hooks and location state
   const location = useLocation();
   const navigate = useNavigate();
+  const { sessionUuid } = useUserSession();
 
   const navTextbook = location.state?.textbook;
   const chatSessionId = location.state?.chatSessionId;
@@ -40,20 +51,68 @@ export default function AIChatPage() {
     ? navTextbook.author.join(", ")
     : "OpenStax";
 
-  // Redirect if no chat session ID
+  // Load chat history and redirect if no chat session ID
   useEffect(() => {
     if (!chatSessionId) {
       navigate('/');
+      return;
     }
-  }, [chatSessionId, navigate]);
 
-  const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
+    const loadChatHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        // Get public token
+        const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+        if (!tokenResponse.ok) throw new Error('Failed to get public token');
+        const { token } = await tokenResponse.json();
 
-  // chat state
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [seeMore, setSeeMore] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
+        // Get all interactions for this chat session
+        const response = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/user_sessions/${sessionUuid}/interactions`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            }
+          }
+        );
+
+        if (!response.ok) throw new Error('Failed to load chat history');
+        
+        interface Interaction {
+          id: string;
+          chat_session_id: string;
+          sender_role: string;
+          query_text?: string;
+          response_text?: string;
+          source_chunks?: string[];
+          created_at: string;
+        }
+
+        const data: { interactions: Interaction[] } = await response.json();
+        const chatMessages = data.interactions
+          // Filter for just this chat session's messages
+          .filter(interaction => interaction.chat_session_id === chatSessionId)
+          // Convert to Message format
+          .map(interaction => ({
+            id: interaction.id,
+            sender: interaction.sender_role.toLowerCase() === 'user' ? 'user' as const : 'bot' as const,
+            text: interaction.sender_role === 'User' ? interaction.query_text || '' : interaction.response_text || '',
+            sources_used: interaction.source_chunks || [],
+            time: new Date(interaction.created_at).getTime()
+          }))
+          // Sort by creation time
+          .sort((a, b) => a.time - b.time);
+
+        setMessages(chatMessages);
+      } catch (error) {
+        console.error('Failed to load chat history:', error);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    loadChatHistory();
+  }, [chatSessionId, navigate, sessionUuid]);
 
   // Fetch prompt templates from API
   useEffect(() => {
@@ -207,22 +266,37 @@ export default function AIChatPage() {
       const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
       const { token } = await tokenResponse.json();
 
-      const response = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
-        }/chat_sessions/${chatSessionId}/text_generation`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            textbook_id: navTextbook.id,
-            query: text,
-          }),
+      // Record the user's message as an interaction (if we have a session UUID)
+      if (sessionUuid) {
+        try {
+          await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user_sessions/${sessionUuid}/interactions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              chat_session_id: chatSessionId,
+              sender_role: 'User',
+              query_text: text,
+            }),
+          });
+        } catch (e) {
+          console.warn('Failed to persist user interaction', e);
         }
-      );
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/chat_sessions/${chatSessionId}/text_generation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          textbook_id: navTextbook.id,
+          query: text,
+        }),
+      });
 
       if (!response.ok) {
         throw new Error('Failed to generate response');
@@ -238,6 +312,26 @@ export default function AIChatPage() {
         time: Date.now(),
       };
       setMessages((m) => [...m, botMsg]);
+
+      // Persist AI response as an interaction as well
+      if (sessionUuid) {
+        try {
+          await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user_sessions/${sessionUuid}/interactions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              chat_session_id: chatSessionId,
+              sender_role: 'AI',
+              response_text: data.response || null,
+            }),
+          });
+        } catch (e) {
+          console.warn('Failed to persist AI interaction', e);
+        }
+      }
     } catch (error) {
       console.error("Error generating text:", error);
       const errorMsg: Message = {
@@ -294,9 +388,15 @@ export default function AIChatPage() {
                     </h1>
                   </>
                 ) : (
-                  // messages area
+                  /* messages area */
                   <div className="flex flex-col gap-4 mb-6">
-                    {messages.map((m) => messageFormatter(m))}
+                    {isLoadingHistory ? (
+                      <div className="flex items-center justify-center py-8">
+                        <p className="text-muted-foreground">Loading chat history...</p>
+                      </div>
+                    ) : (
+                      messages.map((m) => messageFormatter(m))
+                    )}
                   </div>
                 )}
               </div>

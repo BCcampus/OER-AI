@@ -115,7 +115,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   }, []); // Only run once when the app starts
 
   return (
-    <UserSessionContext.Provider value={{ userSessionId, isLoading, error }}>
+    <UserSessionContext.Provider value={{ userSessionId, sessionUuid, isLoading, error }}>
       {children}
     </UserSessionContext.Provider>
   );
