@@ -1,12 +1,14 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { SaveIcon } from "lucide-react";
+import { Button } from "../ui/button";
 
 // temporary props for future api calla
 type UserChatMessageProps = {
   text: string;
+  onSave?: () => void;
 };
 
-export default function UserChatMessage({ text }: UserChatMessageProps) {
+export default function UserChatMessage({ text, onSave }: UserChatMessageProps) {
   return (
     // main msg container
     <div className="flex flex-col items-end gap-1 group">
@@ -19,10 +21,12 @@ export default function UserChatMessage({ text }: UserChatMessageProps) {
       </div>
 
       {/* hover save button */}
-      <div className="pr-2">
+      <div className="flex justify-end">
         <button
-          type="button"
-          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          // visible by default on small (touch) screens, hidden on md+ until hover/focus
+          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity focus:opacity-100"
+          onClick={onSave}
+          aria-label="Save message"
         >
           <SaveIcon className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-foreground" />
         </button>
