@@ -112,8 +112,18 @@ export default function AIChatPage() {
   useEffect(() => {
     const fetchPrompts = async () => {
       try {
+        // Acquire public token then call the endpoint with Authorization
+        const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+        if (!tokenResponse.ok) throw new Error('Failed to get public token');
+        const { token } = await tokenResponse.json();
+
         const response = await fetch(
-          `${import.meta.env.VITE_API_ENDPOINT}/prompt_templates`
+          `${import.meta.env.VITE_API_ENDPOINT}/prompt_templates`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          }
         );
         const data = await response.json();
         const templates = data.templates || [];

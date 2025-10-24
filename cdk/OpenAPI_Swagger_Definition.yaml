@@ -1558,8 +1558,8 @@ paths:
         - User
       summary: Get paginated chat sessions for a textbook
       operationId: get_textbook_chat_sessions
-      #security:
-      #  - userAuthorizer: []
+      security:
+        - userAuthorizer: []
       parameters:
         - name: id
           in: path
@@ -1640,9 +1640,8 @@ paths:
         - User
       summary: Create chat session for textbook
       operationId: create_textbook_chat_session
-      # Security temporarily disabled to allow public token access
-      # security:
-      #   - userAuthorizer: []
+      security:
+        - userAuthorizer: []
       parameters:
         - name: id
           in: path
@@ -2798,7 +2797,8 @@ paths:
         - User
       summary: Get paginated list of prompt templates
       operationId: get_prompt_templates
-
+      security:
+        - userAuthorizer: []
       parameters:
         - name: limit
           in: query
