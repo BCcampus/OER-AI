@@ -12,58 +12,61 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Environment variables
-DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]  # Secret containing database credentials
-REGION = os.environ["REGION"]  # AWS region
-RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]  # Database proxy endpoint
-
-# Get SSM parameter names for models
-BEDROCK_LLM_PARAM = os.environ.get("BEDROCK_LLM_PARAM")  # SSM parameter name for LLM model ID
-EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")  # SSM parameter name for embedding model ID
+DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
+REGION = os.environ["REGION"]
+RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
+BEDROCK_LLM_PARAM = os.environ.get("BEDROCK_LLM_PARAM")
+EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
+TABLE_NAME_PARAM = os.environ.get("TABLE_NAME_PARAM")
+GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
 
 # AWS Clients
 secrets_manager = boto3.client("secretsmanager", region_name=REGION)
 ssm_client = boto3.client("ssm", region_name=REGION)
 bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 
-# Hardcoded model IDs that are widely available in all AWS regions
-# Using Claude models which are available in ca-central-1
-BEDROCK_LLM_ID = "meta.llama3-70b-instruct-v1:0"  # Hardcoded LLM model ID
-EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"  # Hardcoded embedding model ID
+connection = None
+db_secret = None
+BEDROCK_LLM_ID = None
+EMBEDDING_MODEL_ID = None
+TABLE_NAME = None
+GUARDRAIL_ID = None
+embeddings = None
 
-# Log the hardcoded model IDs being used
-logger.info(f"Using hardcoded model IDs:")
-logger.info(f"LLM Model ID: {BEDROCK_LLM_ID}")
-logger.info(f"Embedding Model ID: {EMBEDDING_MODEL_ID}")
+def get_secret(secret_name, expect_json=True):
+    global db_secret
+    if db_secret is None:
+        try:
+            response = secrets_manager.get_secret_value(SecretId=secret_name)["SecretString"]
+            db_secret = json.loads(response) if expect_json else response
+        except Exception as e:
+            logger.error(f"Error fetching secret: {e}")
+            raise
+    return db_secret
 
-# Skip SSM parameter lookup since we're hardcoding the model IDs
-if BEDROCK_LLM_PARAM:
-    logger.info(f"Note: Ignoring SSM parameter {BEDROCK_LLM_PARAM} and using hardcoded model ID instead")
+def get_parameter(param_name, cached_var):
+    if cached_var is None:
+        try:
+            response = ssm_client.get_parameter(Name=param_name, WithDecryption=True)
+            cached_var = response["Parameter"]["Value"]
+        except Exception as e:
+            logger.error(f"Error fetching parameter {param_name}: {e}")
+            raise
+    return cached_var
 
-if EMBEDDING_MODEL_PARAM:
-    logger.info(f"Note: Ignoring SSM parameter {EMBEDDING_MODEL_PARAM} and using hardcoded model ID instead")
+def initialize_constants():
+    global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, TABLE_NAME, GUARDRAIL_ID, embeddings
+    BEDROCK_LLM_ID = get_parameter(BEDROCK_LLM_PARAM, BEDROCK_LLM_ID)
+    EMBEDDING_MODEL_ID = get_parameter(EMBEDDING_MODEL_PARAM, EMBEDDING_MODEL_ID)
+    TABLE_NAME = get_parameter(TABLE_NAME_PARAM, TABLE_NAME)
+    GUARDRAIL_ID = get_parameter(GUARDRAIL_ID_PARAM, GUARDRAIL_ID)
 
-# Initialize embeddings
-try:
-    logger.info(f"Initializing embeddings with model ID: {EMBEDDING_MODEL_ID}")
-    logger.info(f"Using Bedrock runtime client in region: {REGION}")
-    embeddings = BedrockEmbeddings(
-        model_id=EMBEDDING_MODEL_ID,
-        client=bedrock_runtime,
-        region_name=REGION
-    )
-    # Test the embeddings with a simple string to verify they work
-    try:
-        test_embedding = embeddings.embed_query("Test embedding to validate model")
-        logger.info(f"Embeddings test successful. Vector length: {len(test_embedding)}")
-    except Exception as test_error:
-        logger.error(f"Embedding test failed: {str(test_error)}")
-        logger.error(f"This may indicate the model ID {EMBEDDING_MODEL_ID} is not available in region {REGION}")
-        raise
-    logger.info("Embeddings initialized and validated successfully")
-except Exception as e:
-    logger.error(f"Error initializing embeddings: {str(e)}", exc_info=True)
-    logger.error(f"Model ID: {EMBEDDING_MODEL_ID}, Region: {REGION}")
-    raise
+    if embeddings is None:
+        embeddings = BedrockEmbeddings(
+            model_id=EMBEDDING_MODEL_ID,
+            client=bedrock_runtime,
+            region_name=REGION,
+        )
 
 def get_db_credentials():
     """Get database credentials from Secrets Manager"""
@@ -75,21 +78,24 @@ def get_db_credentials():
         raise
 
 def connect_to_db():
-    """Create a database connection"""
-    try:
-        secret = get_db_credentials()
-        conn = psycopg2.connect(
-            dbname=secret["dbname"],
-            user=secret["username"],
-            password=secret["password"],
-            host=RDS_PROXY_ENDPOINT,
-            port=secret["port"]
-        )
-        logger.info("Connected to database")
-        return conn
-    except Exception as e:
-        logger.error(f"Database connection error: {e}")
-        raise
+    global connection
+    if connection is None or connection.closed:
+        try:
+            secret = get_secret(DB_SECRET_NAME)
+            connection_params = {
+                'dbname': secret["dbname"],
+                'user': secret["username"],
+                'password': secret["password"],
+                'host': RDS_PROXY_ENDPOINT,
+                'port': secret["port"]
+            }
+            connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
+            connection = psycopg2.connect(connection_string)
+            logger.info("Connected to the database!")
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+            raise
+    return connection
 
 
 
@@ -159,7 +165,7 @@ def handler(event, context):
     logger.info(f"AWS Region: {REGION}")
     logger.info(f"Lambda function ARN: {context.invoked_function_arn}")
     logger.info(f"Lambda function name: {context.function_name}")
-    logger.info(f"Using hardcoded model IDs - LLM: {BEDROCK_LLM_ID}, Embeddings: {EMBEDDING_MODEL_ID}")
+    logger.info(f"Model parameter paths - LLM: {BEDROCK_LLM_PARAM}, Embeddings: {EMBEDDING_MODEL_PARAM}")
     
     # Extract parameters from the request
     query_params = event.get("queryStringParameters", {})
@@ -172,6 +178,15 @@ def handler(event, context):
     body = {} if event.get("body") is None else json.loads(event.get("body"))
     question = body.get("query", "")
     textbook_id = body.get("textbook_id", "")
+
+    try:
+        initialize_constants()
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize constants: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f'Configuration error: {str(e)}')
+        }
     
     # Validate required parameters
     if not textbook_id:
