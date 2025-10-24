@@ -3,7 +3,6 @@ import TextbookCard from "@/components/HomePage/TextbookCard";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useUserSession } from "@/contexts/UserSessionContext";
 
 // Define a custom UUID type to avoid the crypto module import
 type UUID = string;
@@ -32,15 +31,16 @@ export default function HomePage() {
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [filteredBooks, setFilteredBooks] = useState<TextbookForCard[]>([]);
   const [loading, setLoading] = useState(true);
-  const { getPublicToken } = useUserSession();
 
   // Fetch textbooks from API
   useEffect(() => {
     const fetchTextbooks = async () => {
       try {
-        // Get token from context (cached)
-        const token = await getPublicToken();
-        
+        // Get public token
+        const tokenResp = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+        if (!tokenResp.ok) throw new Error('Failed to get public token');
+        const { token } = await tokenResp.json();
+
         // Use the token to fetch textbooks
         const response = await fetch(
           `${import.meta.env.VITE_API_ENDPOINT}/textbooks`,
@@ -60,7 +60,7 @@ export default function HomePage() {
     };
 
     fetchTextbooks();
-  }, [getPublicToken]);
+  }, []);
 
   // Convert API textbooks to card format and apply search filtering
   useEffect(() => {

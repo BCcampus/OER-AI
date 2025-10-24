@@ -36,7 +36,7 @@ export default function AIChatPage() {
   // Hooks and location state
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionUuid, getPublicToken } = useUserSession();
+  const { sessionUuid } = useUserSession();
 
   const navTextbook = location.state?.textbook;
   const chatSessionId = location.state?.chatSessionId;
@@ -55,8 +55,10 @@ export default function AIChatPage() {
     const loadChatHistory = async () => {
       setIsLoadingHistory(true);
       try {
-  // Get public token (cached)
-  const token = await getPublicToken();
+        // Get public token
+        const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+        if (!tokenResponse.ok) throw new Error('Failed to get public token');
+        const { token } = await tokenResponse.json();
 
         // Get all interactions for this chat session
         const response = await fetch(
@@ -104,7 +106,7 @@ export default function AIChatPage() {
     };
 
     loadChatHistory();
-  }, [chatSessionId, navigate, sessionUuid, getPublicToken]);
+  }, [chatSessionId, navigate, sessionUuid]);
 
   // Fetch prompt templates from API
   useEffect(() => {
@@ -254,8 +256,9 @@ export default function AIChatPage() {
     setMessage("");
 
     try {
-      // Get token for the request (cached)
-      const token = await getPublicToken();
+      // Get fresh token for the request
+      const tokenResponse = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+      const { token } = await tokenResponse.json();
 
       // Record the user's message as an interaction (if we have a session UUID)
       if (sessionUuid) {
