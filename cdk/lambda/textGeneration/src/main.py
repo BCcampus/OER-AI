@@ -55,11 +55,9 @@ def get_parameter(param_name, cached_var):
     return cached_var
 
 def initialize_constants():
-    global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, TABLE_NAME, GUARDRAIL_ID, embeddings
+    global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, embeddings
     BEDROCK_LLM_ID = get_parameter(BEDROCK_LLM_PARAM, BEDROCK_LLM_ID)
     EMBEDDING_MODEL_ID = get_parameter(EMBEDDING_MODEL_PARAM, EMBEDDING_MODEL_ID)
-    TABLE_NAME = get_parameter(TABLE_NAME_PARAM, TABLE_NAME)
-    GUARDRAIL_ID = get_parameter(GUARDRAIL_ID_PARAM, GUARDRAIL_ID)
 
     if embeddings is None:
         embeddings = BedrockEmbeddings(
