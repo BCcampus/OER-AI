@@ -56,6 +56,7 @@ def initialize_constants():
     global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, embeddings
     BEDROCK_LLM_ID = get_parameter(BEDROCK_LLM_PARAM, BEDROCK_LLM_ID)
     EMBEDDING_MODEL_ID = get_parameter(EMBEDDING_MODEL_PARAM, EMBEDDING_MODEL_ID)
+    GUARDRAIL_ID = get_parameter(GUARDRAIL_ID_PARAM, GUARDRAIL_ID)
 
     if embeddings is None:
         embeddings = BedrockEmbeddings(
@@ -139,7 +140,8 @@ def process_query(query, textbook_id, retriever, chat_session_id, connection=Non
             llm=llm,
             retriever=retriever,
             chat_session_id=chat_session_id,
-            connection=connection
+            connection=connection,
+            guardrail_id=GUARDRAIL_ID
         )
     except Exception as e:
         logger.error(f"Error in process_query: {str(e)}", exc_info=True)
@@ -272,19 +274,10 @@ def handler(event, context):
                     cur.execute(
                         """
                         INSERT INTO user_interactions
-                        (chat_session_id, sender_role, query_text, response_text)
+                        (chat_session_id, sender_role, query_text, response_text, source_chunks)
                         VALUES (%s, %s, %s, %s)
                         """,
-                        (chat_session_id, "User", question, response_data["response"])
-                    )
-                else:
-                    cur.execute(
-                        """
-                        INSERT INTO user_interactions
-                        (sender_role, query_text, response_text)
-                        VALUES (%s, %s, %s)
-                        """,
-                        ("User", question, response_data["response"])
+                        (chat_session_id, "User", question, response_data["response"], json.dumps(response_data["sources_used"])
                     )
             
             connection.commit()

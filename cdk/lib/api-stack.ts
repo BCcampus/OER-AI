@@ -747,6 +747,86 @@ export class ApiGatewayStack extends cdk.Stack {
       pointInTimeRecovery: false, // Enable for production if needed
     });
 
+    // Create Bedrock Guardrails
+    const bedrockGuardrail = new bedrock.CfnGuardrail(
+      this,
+      "BedrockGuardrail",
+      {
+        name: `${id}-oer-guardrail`,
+        description:
+          "Guardrail for OpenEd AI pedagogical tutor to ensure safe and appropriate educational interactions",
+        blockedInputMessaging:
+          "I'm here to help with your learning! However, I can't assist with that particular request. Let's focus on your textbook material instead. What specific topic would you like to explore?",
+        blockedOutputsMessaging:
+          "I want to keep our conversation focused on learning and education. Let me redirect us back to your studies. What concept from your textbook can I help you understand better?",
+        contentPolicyConfig: {
+          filtersConfig: [
+            {
+              type: "PROMPT_ATTACK",
+              inputStrength: "HIGH",
+              outputStrength: "NONE",
+            },
+          ],
+        },
+        sensitiveInformationPolicyConfig: {
+          piiEntitiesConfig: [
+            {
+              type: "EMAIL",
+              action: "BLOCK",
+            },
+            {
+              type: "PHONE",
+              action: "BLOCK",
+            },
+            {
+              type: "CA_SOCIAL_INSURANCE_NUMBER",
+              action: "BLOCK",
+            },
+            {
+              type: "CREDIT_DEBIT_CARD_NUMBER",
+              action: "BLOCK",
+            },
+          ],
+        },
+        topicPolicyConfig: {
+          topicsConfig: [
+            {
+              name: "NonEducationalContent",
+              definition:
+                "Content that diverts from educational purposes, including inappropriate requests, harmful activities, or non-academic discussions that are not suitable for a learning environment",
+              examples: [
+                "How to hack systems or bypass security",
+                "Illegal activities or unethical behavior",
+                "Personal attacks or harassment",
+              ],
+              type: "DENY",
+            },
+            {
+              name: "AcademicIntegrity",
+              definition:
+                "Requests that could compromise academic integrity by providing direct answers to assignments, exams, or homework without educational guidance",
+              examples: [
+                "Complete this assignment for me",
+                "Give me the answers to this test",
+                "Write my essay without explanation",
+              ],
+              type: "DENY",
+            },
+          ],
+        },
+      }
+    );
+
+    const guardrailParameter = new ssm.StringParameter(
+      this,
+      "GuardrailParameter",
+      {
+        parameterName: `/${id}/OER/GuardrailId`,
+        description: "Parameter containing the Bedrock Guardrail ID",
+        stringValue: bedrockGuardrail.attrGuardrailId,
+      }
+    );
+
     const textGenLambdaDockerFunc = new lambda.DockerImageFunction(
       this,
       `${id}-TextGenLambdaDockerFunction`,
@@ -768,7 +848,7 @@ export class ApiGatewayStack extends cdk.Stack {
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
           TABLE_NAME_PARAM: sessionTable.tableName,
-          //GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
+          GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
           //MESSAGE_LIMIT_PARAM: messageLimitParameter.parameterName,
           //APPSYNC_ENDPOINT: this.eventApi.graphqlUrl,
           //APPSYNC_API_ID: this.eventApi.apiId,
@@ -820,7 +900,7 @@ export class ApiGatewayStack extends cdk.Stack {
         `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1`,
         `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
         `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
-        //`arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
+        `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
       ],
     });
     textGenLambdaDockerFunc.addToRolePolicy(textGenBedrockPolicyStatement);
@@ -844,7 +924,7 @@ export class ApiGatewayStack extends cdk.Stack {
         resources: [
           bedrockLLMParameter.parameterArn,
           embeddingModelParameter.parameterArn,
-          //guardrailParameter.parameterArn,
+          guardrailParameter.parameterArn,
           //messageLimitParameter.parameterArn,
         ],
       })

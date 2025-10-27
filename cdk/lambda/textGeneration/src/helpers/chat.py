@@ -91,6 +91,34 @@ def get_bedrock_llm(
         logger.error(traceback.format_exc())
         raise
 
+def apply_guardrails(text: str, guardrail_id: str, source: str = "INPUT") -> dict:
+    """Apply Bedrock guardrails to input or output text."""
+    try:
+        bedrock_runtime = boto3.client("bedrock-runtime")
+        
+        response = bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=guardrail_id,
+            guardrailVersion="DRAFT", #Use appropriate version once published (e.g., "1", "2", etc.)
+            source=source,
+            content=[
+                {
+                    "text": {
+                        "text": text
+                    }
+                }
+            ]
+        )
+        
+        # Check if content was blocked
+        action = response.get('action', 'NONE')
+        blocked = action == 'GUARDRAIL_INTERVENED'
+        
+        return {
+            'blocked': blocked,
+            'action': action,
+            'assessments': response.get('assessments', [])
+        }
+
 def get_textbook_prompt(textbook_id: str, connection) -> str:
     """Get a custom prompt for a textbook from the database if available."""
     if connection is None:
@@ -116,7 +144,7 @@ def get_textbook_prompt(textbook_id: str, connection) -> str:
         return None
 
 
-def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, chat_session_id: str, connection=None) -> dict:
+def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, chat_session_id: str, connection=None, guardrail_id: str = None) -> dict:
     """
     Generate a response to a query using the provided retriever and LLM with chat history support.
     
@@ -132,6 +160,22 @@ def get_response(query: str, textbook_id: str, llm: ChatBedrock, retriever, chat
         A dictionary containing the response and sources_used
     """
     # Validate required parameters
+
+    if guardrail_id and guardrail_id.strip():
+        try:
+            guardrail_response = apply_guardrails(query, guardrail_id)
+            if guardrail_response.get('blocked', False):
+                if stream_callback:
+                    stream_callback("I cannot process this request as it contains inappropriate content for academic research.")
+            
+                return {
+                    "response": "I cannot process this request as it contains inappropriate content for academic learning.",
+                    "sources_used": [],
+                    "assessments": guardrail_response.get('assessments', [])
+                }
+        except Exception as e:
+            logger.warning(f"Guardrail check failed: {e}")
+    
     if not chat_session_id:
         logger.warning("No chat_session_id provided, chat history will not be maintained")
         chat_session_id = f"default-{int(time.time())}"  # Fallback session ID
