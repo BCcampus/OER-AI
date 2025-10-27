@@ -275,9 +275,9 @@ def handler(event, context):
                         """
                         INSERT INTO user_interactions
                         (chat_session_id, sender_role, query_text, response_text, source_chunks)
-                        VALUES (%s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s)
                         """,
-                        (chat_session_id, "User", question, response_data["response"], json.dumps(response_data["sources_used"])
+                        (chat_session_id, "User", question, response_data["response"], json.dumps(response_data["sources_used"]))
                     )
             
             connection.commit()
