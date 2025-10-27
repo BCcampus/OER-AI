@@ -118,6 +118,15 @@ def apply_guardrails(text: str, guardrail_id: str, source: str = "INPUT") -> dic
             'action': action,
             'assessments': response.get('assessments', [])
         }
+    except Exception as e:
+        logger.error(f"Error applying guardrails: {str(e)}")
+        logger.error(traceback.format_exc())
+        # Return safe defaults if guardrail check fails
+        return {
+            'blocked': False,
+            'action': 'NONE',
+            'assessments': []
+        }
 
 def get_textbook_prompt(textbook_id: str, connection) -> str:
     """Get a custom prompt for a textbook from the database if available."""
