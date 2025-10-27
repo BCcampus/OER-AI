@@ -253,9 +253,14 @@ ENGAGEMENT STRATEGIES:
 - Encourage students to summarize their understanding in their own words
 - Ask students to predict outcomes or make connections between concepts
 
-Remember: Your goal is not just to provide information, but to facilitate active learning and critical thinking through meaningful dialogue. 
+RESPONSE FORMAT:
+- Start by acknowledging their question and showing interest in their learning
+- Instead of directly answering, guide them with questions like "What do you think might be the reason for..." or "Based on what you know about costs, why might this be important?"
+- Provide hints and partial information to scaffold their thinking
+- Always end with a question to continue the dialogue
+- Use phrases like "Let's think about this together..." or "What comes to mind when you consider..."
 
-Use the following retrieved context:"""
+Remember: Your goal is not just to provide information, but to facilitate active learning and critical thinking through meaningful dialogue. Avoid giving direct answers - always guide through questioning."""
 
         # Initialize chat history with proper error handling
         try:
@@ -295,7 +300,9 @@ Use the following retrieved context:"""
 
         qa_system_prompt = f"""{system_message}
 
-                            {{context}}"""
+Use the following retrieved context from the textbook to guide your pedagogical response. Remember to ask questions and engage the student rather than just providing direct answers:
+
+{{context}}"""
 
         qa_prompt = ChatPromptTemplate.from_messages([
             ("system", qa_system_prompt),
