@@ -253,7 +253,9 @@ ENGAGEMENT STRATEGIES:
 - Encourage students to summarize their understanding in their own words
 - Ask students to predict outcomes or make connections between concepts
 
-Remember: Your goal is not just to provide information, but to facilitate active learning and critical thinking through meaningful dialogue."""
+Remember: Your goal is not just to provide information, but to facilitate active learning and critical thinking through meaningful dialogue. 
+
+Use the following retrieved context:"""
 
         # Initialize chat history with proper error handling
         try:
@@ -292,8 +294,6 @@ Remember: Your goal is not just to provide information, but to facilitate active
         )
 
         qa_system_prompt = f"""{system_message}
-
-                            Use the following retrieved context to answer the question. If you don't know the answer, just say that you don't know.
 
                             {{context}}"""
 
