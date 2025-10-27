@@ -3633,6 +3633,7 @@ components:
         type: token
         authorizerUri:
           Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userLambdaAuthorizer.Arn}/invocations
+        authorizerResultTtlInSeconds: 300
         identitySource: method.request.header.Authorization
   responses:
     Success:

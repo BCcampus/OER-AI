@@ -272,7 +272,7 @@ export class ApiGatewayStack extends cdk.Stack {
       cloudWatchRole: true,
       deployOptions: {
         stageName: "prod",
-        loggingLevel: apigateway.MethodLoggingLevel.ERROR,
+        loggingLevel: apigateway.MethodLoggingLevel.INFO,
         dataTraceEnabled: true,
         metricsEnabled: true,
         accessLogDestination: new apigateway.LogGroupLogDestination(
