@@ -736,7 +736,7 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Create DynamoDB table for session management with 30-day TTL
     const sessionTable = new dynamodb.Table(this, `${id}-ConversationTable`, {
-      tableName: "DynamoDB-Conversation-Table",
+      tableName: `${id}-DynamoDB-Conversation-Table`,
       partitionKey: {
         name: "SessionId",
         type: dynamodb.AttributeType.STRING,
