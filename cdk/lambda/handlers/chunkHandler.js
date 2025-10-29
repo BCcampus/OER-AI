@@ -103,8 +103,8 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
-      case "GET /chunks/{id}":
-        const getChunkId = event.pathParameters?.id;
+      case "GET /chunks/{chunk_id}":
+        const getChunkId = event.pathParameters?.chunk_id;
         if (!getChunkId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Chunk ID is required" });
@@ -154,8 +154,8 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
-      case "PUT /chunks/{id}":
-        const putChunkId = event.pathParameters?.id;
+      case "PUT /chunks/{chunk_id}":
+        const putChunkId = event.pathParameters?.chunk_id;
         if (!putChunkId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Chunk ID is required" });
@@ -214,8 +214,8 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
-      case "DELETE /chunks/{id}":
-        const deleteChunkId = event.pathParameters?.id;
+      case "DELETE /chunks/{chunk_id}":
+        const deleteChunkId = event.pathParameters?.chunk_id;
         if (!deleteChunkId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Chunk ID is required" });

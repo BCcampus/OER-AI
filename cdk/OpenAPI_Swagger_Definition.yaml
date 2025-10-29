@@ -2426,7 +2426,7 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /media_items/{id}:
+  /media_items/{media_item_id}:
     <<: *commonOptions
     get:
       tags:
@@ -2436,7 +2436,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: media_item_id
           in: path
           required: true
           description: Media item UUID
@@ -2505,7 +2505,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: media_item_id
           in: path
           required: true
           description: Media item UUID
@@ -2608,7 +2608,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: media_item_id
           in: path
           required: true
           description: Media item UUID
@@ -2796,7 +2796,7 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /chunks/{id}:
+  /chunks/{chunk_id}:
     <<: *commonOptions
     get:
       tags:
@@ -2806,7 +2806,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: chunk_id
           in: path
           required: true
           description: Chunk UUID
@@ -2860,7 +2860,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: chunk_id
           in: path
           required: true
           description: Chunk UUID
@@ -2931,7 +2931,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: chunk_id
           in: path
           required: true
           description: Chunk UUID
