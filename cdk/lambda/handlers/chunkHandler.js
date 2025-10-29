@@ -79,14 +79,14 @@ exports.handler = async (event) => {
         const chunksOffset = (chunksPage - 1) * chunksLimit;
         
         const chunksTotalResult = await sqlConnection`
-          SELECT COUNT(*) as total FROM document_chunks WHERE textbook_id = ${chunksTextbookId}
+          SELECT COUNT(*) as total FROM document_chunks WHERE textbook_id = ${chunkTextbookId}
         `;
         const chunksTotal = parseInt(chunksTotalResult[0].total);
         
         const chunks = await sqlConnection`
           SELECT id, textbook_id, section_id, media_item_id, chunk_text, chunk_meta, created_at
           FROM document_chunks
-          WHERE textbook_id = ${chunksTextbookId}
+          WHERE textbook_id = ${chunkTextbookId}
           ORDER BY created_at ASC
           LIMIT ${chunksLimit} OFFSET ${chunksOffset}
         `;
