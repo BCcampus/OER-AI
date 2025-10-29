@@ -8,7 +8,7 @@ import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
 import { useTextbookView } from "@/providers/textbookView";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
 import type { PromptTemplate } from "@/types/Chat";
-import { useUserSession } from "@/contexts/UserSessionContext";
+import { useUserSession } from "@/providers/usersession";
 
 type Message = {
   id: string;

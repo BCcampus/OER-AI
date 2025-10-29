@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router";
 import AIChatPage from "./pages/ChatInterface/ChatInterface";
 import HomePage from "./pages/HomePage";
-import { UserSessionProvider } from "./contexts/UserSessionContext";
+import { UserSessionProvider } from "./providers/UserSessionContext";
 import { ModeProvider } from "@/providers/ModeContext";
 import TextbookLayout from "./layouts/TextbookLayout";
 import PracticeMaterialPage from "./pages/PracticeMaterial/PracticeMaterialPage";

@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import StudentSideBar from "@/components/ChatInterface/StudentSideBar";
 import type { Textbook } from "@/types/Textbook";
 import type { ChatSession } from "@/providers/textbookView";
-import { useUserSession } from "@/contexts/UserSessionContext";
+import { useUserSession } from "@/providers/usersession";
 
 export default function TextbookLayout() {
   const { id } = useParams();
@@ -58,6 +58,7 @@ export default function TextbookLayout() {
     };
 
     fetchTextbook();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Fetch chat sessions for this textbook
