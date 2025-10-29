@@ -260,6 +260,17 @@ paths:
       operationId: create_user_session
       security:
         - userAuthorizer: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: ["student", "instructor"]
+                  description: Role of the user session (defaults to 'student' if not provided)
       responses:
         "200":
           description: Session created successfully
@@ -274,6 +285,10 @@ paths:
                   userSessionId:
                     type: string
                     format: uuid
+                  role:
+                    type: string
+                    enum: ["student", "instructor"]
+                    description: Role of the user session
         "401":
           description: Unauthorized
         "500":

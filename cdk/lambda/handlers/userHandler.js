@@ -79,15 +79,19 @@ exports.handler = async (event) => {
       case "POST /user_sessions":
         // After schema refactor, user_sessions no longer has a separate session_id column.
         // Create a new session row and use its primary key (id) as the public session UUID.
+        const sessionBody = parseBody(event.body);
+        const sessionRole = sessionBody.role || 'student'; // default to 'student' if not provided
+        
         const result = await sqlConnection`
-          INSERT INTO user_sessions (created_at, last_active_at)
-          VALUES (NOW(), NOW())
-          RETURNING id, created_at
+          INSERT INTO user_sessions (role, created_at, last_active_at)
+          VALUES (${sessionRole}, NOW(), NOW())
+          RETURNING id, role, created_at
         `;
 
         data = {
           sessionId: result[0].id, // public session UUID
           userSessionId: result[0].id, // internal id is the same UUID
+          role: result[0].role,
         };
         response.body = JSON.stringify(data);
         break;

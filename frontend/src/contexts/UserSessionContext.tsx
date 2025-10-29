@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { useMode } from "../providers/mode";
 
 interface UserSessionContextType {
   userSessionId: string | null;
@@ -18,6 +19,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const LOCAL_KEY = "oer_user_session";
+  const { mode } = useMode(); // Get current mode from context
 
   useEffect(() => {
     const validateSession = async (stored: {
@@ -67,8 +69,10 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
           {
             method: "POST",
             headers: {
+              "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
+            body: JSON.stringify({ role: mode }), // Pass the current mode as role
           }
         );
 
