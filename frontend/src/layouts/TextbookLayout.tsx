@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Outlet, useParams, useNavigate } from "react-router";
-import { TextbookProvider } from "@/providers/TextbookContext";
+import { TextbookViewProvider } from "@/providers/TextbookViewContext";
 import { SidebarProvider } from "@/providers/SidebarContext";
 import Header from "@/components/Header";
 import StudentSideBar from "@/components/ChatInterface/StudentSideBar";
 import type { Textbook } from "@/types/Textbook";
-import type { ChatSession } from "@/providers/textbook";
+import type { ChatSession } from "@/providers/textbookView";
 import { useUserSession } from "@/contexts/UserSessionContext";
 
 export default function TextbookLayout() {
@@ -156,7 +156,7 @@ export default function TextbookLayout() {
   };
 
   return (
-    <TextbookProvider 
+    <TextbookViewProvider 
       value={{ 
         textbook, 
         loading, 
@@ -184,6 +184,6 @@ export default function TextbookLayout() {
           </div>
         </div>
       </SidebarProvider>
-    </TextbookProvider>
+    </TextbookViewProvider>
   );
 }

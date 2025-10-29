@@ -5,7 +5,7 @@ import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
 import { Button } from "@/components/ui/button";
 import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
-import { useTextbook } from "@/providers/textbook";
+import { useTextbookView } from "@/providers/textbookView";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
 import type { PromptTemplate } from "@/types/Chat";
 import { useUserSession } from "@/contexts/UserSessionContext";
@@ -34,7 +34,7 @@ export default function AIChatPage() {
     chatSessions,
     createNewChatSession,
     isLoadingChatSessions 
-  } = useTextbook();
+  } = useTextbookView();
   const { sessionUuid } = useUserSession();
 
   const textbookTitle = textbook?.title ?? "Calculus: Volume 3";

@@ -3,14 +3,14 @@ import type { Textbook } from '@/types/Textbook';
 
 export type ChatSession = {
   id: string;
+  user_session_id: string;
   textbook_id: string;
-  user_sessions_session_id: string;
-  title?: string;
+  context?: unknown;
   created_at: string;
-  updated_at: string;
+  metadata?: unknown;
 };
 
-export type TextbookContextType = {
+export type TextbookViewContextType = {
   textbook: Textbook | null;
   loading: boolean;
   error: Error | null;
@@ -24,12 +24,12 @@ export type TextbookContextType = {
   refreshChatSessions: () => Promise<void>;
 };
 
-export const TextbookContext = createContext<TextbookContextType | undefined>(undefined);
+export const TextbookViewContext = createContext<TextbookViewContextType | undefined>(undefined);
 
-export function useTextbook() {
-  const context = useContext(TextbookContext);
+export function useTextbookView() {
+  const context = useContext(TextbookViewContext);
   if (!context) {
-    throw new Error('useTextbook must be used within TextbookProvider');
+    throw new Error('useTextbookView must be used within TextbookViewProvider');
   }
   return context;
 }
