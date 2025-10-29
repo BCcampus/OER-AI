@@ -6,16 +6,16 @@ import { ModeProvider } from '@/providers/ModeContext'
 
 function App() {
   return (
-    <ModeProvider>
-      <BrowserRouter>
+    <BrowserRouter>
         <UserSessionProvider>
+    <ModeProvider>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/textbook/:id/chat" element={<AIChatPage />} />
           </Routes>
+    </ModeProvider>
         </UserSessionProvider>
       </BrowserRouter>
-    </ModeProvider>
   )
 }
 

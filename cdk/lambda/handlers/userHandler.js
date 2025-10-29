@@ -106,7 +106,7 @@ exports.handler = async (event) => {
 
         // Validate and get user session by primary key (id)
         const userSession = await sqlConnection`
-          SELECT id, session_title, context, created_at, last_active_at, expires_at, metadata
+          SELECT id, session_title, context, role, created_at, last_active_at, expires_at, metadata
           FROM user_sessions 
           WHERE id = ${sessionId}
         `;
@@ -128,11 +128,47 @@ exports.handler = async (event) => {
           id: userSession[0].id,
           session_title: userSession[0].session_title,
           context: userSession[0].context,
+          role: userSession[0].role,
           created_at: userSession[0].created_at,
           last_active_at: new Date().toISOString(), // Return updated timestamp
           expires_at: userSession[0].expires_at,
           metadata: userSession[0].metadata,
         };
+        response.body = JSON.stringify(data);
+        break;
+
+      case "PUT /user_sessions/{session_id}":
+        const updateSessionId = event.pathParameters?.session_id;
+        if (!updateSessionId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Session ID is required" });
+          break;
+        }
+
+        const updateSessionBody = parseBody(event.body);
+        const updateRole = updateSessionBody.role;
+
+        if (!updateRole || !['student', 'instructor'].includes(updateRole)) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Valid role (student or instructor) is required" });
+          break;
+        }
+
+        // Update the user session role
+        const updatedSession = await sqlConnection`
+          UPDATE user_sessions 
+          SET role = ${updateRole}, last_active_at = NOW()
+          WHERE id = ${updateSessionId}
+          RETURNING id, session_title, context, role, created_at, last_active_at, expires_at, metadata
+        `;
+
+        if (updatedSession.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "User session not found" });
+          break;
+        }
+
+        data = updatedSession[0];
         response.body = JSON.stringify(data);
         break;
 

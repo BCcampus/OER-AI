@@ -8,12 +8,13 @@ import {
 } from "@/components/ui/dialog";
 import PromptCard from "./PromptCard";
 import { Tabs, TabsContent, TabsTrigger, TabsList } from "../ui/tabs";
-import type { PromptTemplate } from "@/types/Chat";
+import type { PromptTemplate, SharedUserPrompt } from "@/types/Chat";
 
 type PromptLibraryModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prompts?: PromptTemplate[];
+  sharedPrompts?: SharedUserPrompt[];
   onSelectPrompt?: (prompt: string) => void;
   title?: string;
   children?: React.ReactNode;
@@ -23,6 +24,7 @@ export default function PromptLibraryModal({
   open,
   onOpenChange,
   prompts = [],
+  sharedPrompts = [],
   onSelectPrompt,
 }: PromptLibraryModalProps) {
   return (
@@ -71,12 +73,12 @@ export default function PromptLibraryModal({
             </DialogHeader>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 items-stretch">
-              {prompts.map((prompt) => (
+              {sharedPrompts.map((prompt) => (
                 <PromptCard
                   key={prompt.id}
-                  name={prompt.name}
+                  name={prompt.title}
                   onClick={() => {
-                    onSelectPrompt?.(prompt.description ?? prompt.name);
+                    onSelectPrompt?.(prompt.prompt_text);
                     onOpenChange(false);
                   }}
                 />

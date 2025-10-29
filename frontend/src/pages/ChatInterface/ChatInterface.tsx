@@ -10,8 +10,9 @@ import StudentSideBar from "@/components/ChatInterface/StudentSideBar";
 import { SidebarProvider } from "@/providers/SidebarContext";
 import { useLocation, useNavigate } from "react-router";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { useMode } from "@/providers/mode";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
-import type { PromptTemplate } from "@/types/Chat";
+import type { PromptTemplate, SharedUserPrompt } from "@/types/Chat";
 
 type Message = {
   id: string;
@@ -25,6 +26,7 @@ export default function AIChatPage() {
   // State
   const [message, setMessage] = useState("");
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
+  const [sharedPrompts, setSharedPrompts] = useState<SharedUserPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [seeMore, setSeeMore] = useState(false);
@@ -35,6 +37,7 @@ export default function AIChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { sessionUuid } = useUserSession();
+  const { mode } = useMode();
 
   const navTextbook = location.state?.textbook;
   const chatSessionId = location.state?.chatSessionId;
@@ -160,6 +163,45 @@ export default function AIChatPage() {
 
     fetchPrompts();
   }, []);
+
+  // Fetch shared prompts from API filtered by current mode
+  useEffect(() => {
+    const fetchSharedPrompts = async () => {
+      if (!navTextbook?.id) return; // Need textbook_id
+      
+      try {
+        // Acquire public token
+        const tokenResponse = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
+        );
+        if (!tokenResponse.ok) throw new Error("Failed to get public token");
+        const { token } = await tokenResponse.json();
+
+        const response = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${navTextbook.id}/shared_prompts`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const data = await response.json();
+        const allSharedPrompts = data.prompts || [];
+        
+        // Filter by current mode/role
+        const filteredPrompts = allSharedPrompts.filter(
+          (prompt: any) => prompt.role === mode
+        );
+        
+        setSharedPrompts(filteredPrompts);
+      } catch (error) {
+        console.error("Error fetching shared prompts:", error);
+        setSharedPrompts([]);
+      }
+    };
+
+    fetchSharedPrompts();
+  }, [navTextbook?.id, mode]); // Re-fetch when textbook id or mode changes
 
   async function sendMessage() {
     const text = message.trim();
@@ -352,6 +394,7 @@ export default function AIChatPage() {
               open={showLibrary}
               onOpenChange={setShowLibrary}
               prompts={prompts}
+              sharedPrompts={sharedPrompts}
               onSelectPrompt={(msg) => {
                 setMessage(msg);
               }}
