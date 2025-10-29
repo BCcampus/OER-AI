@@ -3143,7 +3143,7 @@ paths:
         type: aws_proxy
       x-amazon-apigateway-request-validator: all
 
-  /prompt_templates/{id}:
+  /prompt_templates/{prompt_template_id}:
     <<: *commonOptions
     get:
       tags:
@@ -3153,7 +3153,7 @@ paths:
       security:
         - adminAuthorizer: []
       parameters:
-        - name: id
+        - name: prompt_template_id
           in: path
           required: true
           description: Template UUID
@@ -3220,7 +3220,7 @@ paths:
       security:
         - adminAuthorizer: []
       parameters:
-        - name: id
+        - name: prompt_template_id
           in: path
           required: true
           description: Template UUID
@@ -3315,7 +3315,7 @@ paths:
       security:
         - adminAuthorizer: []
       parameters:
-        - name: id
+        - name: prompt_template_id
           in: path
           required: true
           description: Template UUID
