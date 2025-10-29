@@ -2074,7 +2074,7 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /sections/{id}:
+  /sections/{section_id}:
     <<: *commonOptions
     get:
       tags:
@@ -2084,7 +2084,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: section_id
           in: path
           required: true
           description: Section UUID
@@ -2141,7 +2141,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: section_id
           in: path
           required: true
           description: Section UUID
@@ -2219,7 +2219,7 @@ paths:
       security:
         - userAuthorizer: []
       parameters:
-        - name: id
+        - name: section_id
           in: path
           required: true
           description: Section UUID

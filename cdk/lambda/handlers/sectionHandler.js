@@ -121,8 +121,8 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
-      case "GET /sections/{id}":
-        const getSectionId = event.pathParameters?.id;
+      case "GET /sections/{section_id}":
+        const getSectionId = event.pathParameters?.section_id;
         if (!getSectionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Section ID is required" });
@@ -145,8 +145,8 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
-      case "PUT /sections/{id}":
-        const putSectionId = event.pathParameters?.id;
+      case "PUT /sections/{section_id}":
+        const putSectionId = event.pathParameters?.section_id;
         if (!putSectionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Section ID is required" });
@@ -173,8 +173,8 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
         
-      case "DELETE /sections/{id}":
-        const deleteSectionId = event.pathParameters?.id;
+      case "DELETE /sections/{section_id}":
+        const deleteSectionId = event.pathParameters?.section_id;
         if (!deleteSectionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Section ID is required" });
