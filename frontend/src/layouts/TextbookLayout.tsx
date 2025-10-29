@@ -7,6 +7,7 @@ import StudentSideBar from "@/components/ChatInterface/StudentSideBar";
 import type { Textbook } from "@/types/Textbook";
 import type { ChatSession } from "@/providers/textbookView";
 import { useUserSession } from "@/providers/usersession";
+import HomePageHeader from "@/components/HomePageHeader";
 
 export default function TextbookLayout() {
   const { id } = useParams();
@@ -154,6 +155,21 @@ export default function TextbookLayout() {
   const refreshChatSessions = async () => {
     await fetchChatSessions();
   };
+
+  // Show loading screen while fetching initial data
+  if (loading || isLoadingChatSessions) {
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <HomePageHeader  />
+        <div className="pt-[70px] flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TextbookViewProvider 
