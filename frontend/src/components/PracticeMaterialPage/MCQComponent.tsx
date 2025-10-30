@@ -17,6 +17,7 @@ interface MCQQuestionComponentProps {
   answer: QuestionAnswer;
   onAnswerChange: (questionId: string, optionId: string) => void;
   onSubmit: (questionId: string) => void;
+  onReset: (questionId: string) => void;
 }
 
 export function MCQQuestionComponent({
@@ -25,6 +26,7 @@ export function MCQQuestionComponent({
   answer,
   onAnswerChange,
   onSubmit,
+  onReset,
 }: MCQQuestionComponentProps) {
   const handleOptionClick = (optionId: string) => {
     if (!answer.hasSubmitted) {
@@ -36,6 +38,10 @@ export function MCQQuestionComponent({
     if (answer.selectedOption && !answer.hasSubmitted) {
       onSubmit(question.id);
     }
+  };
+
+  const handleReset = () => {
+    onReset(question.id);
   };
 
   return (
@@ -126,7 +132,7 @@ export function MCQQuestionComponent({
                 <XCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
               )}
 
-              <div>
+              <div className="flex-1">
                 <p className="font-semibold mb-1">
                   {answer.isCorrect ? "Correct!" : "Incorrect"}
                 </p>
@@ -139,7 +145,20 @@ export function MCQQuestionComponent({
                 </p>
               </div>
             </div>
-          </Card>``
+          </Card>
+        </CardFooter>
+      )}
+
+      {/* reset button */}
+      {answer.hasSubmitted && (
+        <CardFooter className="px-4 pt-0">
+          <Button
+            onClick={handleReset}
+            className="w-full"
+            variant="outline"
+          >
+            Reset & Try Again
+          </Button>
         </CardFooter>
       )}
 
