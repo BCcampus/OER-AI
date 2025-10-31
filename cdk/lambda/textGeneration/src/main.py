@@ -5,7 +5,7 @@ import logging
 import psycopg2
 from langchain_aws import BedrockEmbeddings
 from helpers.vectorstore import get_textbook_retriever
-from helpers.chat import get_bedrock_llm, get_response
+from helpers.chat import get_bedrock_llm, get_response_streaming
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +18,7 @@ RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
 BEDROCK_LLM_PARAM = os.environ.get("BEDROCK_LLM_PARAM")
 EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
 GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
-
+WEBSOCKET_API_ENDPOINT = os.environ.get("WEBSOCKET_API_ENDPOINT", "")
 # AWS Clients
 secrets_manager = boto3.client("secretsmanager", region_name=REGION)
 ssm_client = boto3.client("ssm", region_name=REGION)
@@ -103,6 +103,50 @@ def connect_to_db():
 
 
 # This function is now a wrapper for the helper function in chat.py
+def process_query_streaming(query, textbook_id, retriever, chat_session_id, websocket_endpoint, connection_id, connection=None):
+    """
+    Process a query using streaming response via WebSocket
+    """
+    logger.info(f"Processing streaming query with LLM model ID: '{BEDROCK_LLM_ID}'")
+    
+    try:
+        # Initialize LLM
+        logger.info(f"Initializing Bedrock LLM with model ID: {BEDROCK_LLM_ID}")
+        llm = get_bedrock_llm(BEDROCK_LLM_ID)
+        
+        # Use the streaming helper function from chat.py
+        logger.info(f"Calling get_response_streaming with textbook_id: {textbook_id}")
+        return get_response_streaming(
+            query=query,
+            textbook_id=textbook_id,
+            llm=llm,
+            retriever=retriever,
+            chat_session_id=chat_session_id,
+            connection=connection,
+            guardrail_id=GUARDRAIL_ID,
+            websocket_endpoint=websocket_endpoint,
+            connection_id=connection_id
+        )
+    except Exception as e:
+        logger.error(f"Error in process_query_streaming: {str(e)}", exc_info=True)
+        # Send error message via WebSocket
+        try:
+            apigatewaymanagementapi = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
+            apigatewaymanagementapi.post_to_connection(
+                ConnectionId=connection_id,
+                Data=json.dumps({
+                    "type": "error",
+                    "message": "I'm sorry, I encountered an error while processing your question."
+                })
+            )
+        except Exception as ws_error:
+            logger.error(f"Failed to send error via WebSocket: {ws_error}")
+        
+        return {
+            "response": f"I'm sorry, I encountered an error while processing your question.",
+            "sources_used": []
+        }
+
 def process_query(query, textbook_id, retriever, chat_session_id, connection=None):
     """
     Process a query using the chat helper function
@@ -165,12 +209,18 @@ def handler(event, context):
     Takes an API Gateway event with a textbook_id and question,
     retrieves relevant passages from the vectorstore, and generates
     an answer using the helper functions in chat.py
+    
+    Supports both regular API calls and WebSocket streaming
     """
     logger.info("Starting textbook question answering Lambda")
     logger.info(f"AWS Region: {REGION}")
     logger.info(f"Lambda function ARN: {context.invoked_function_arn}")
     logger.info(f"Lambda function name: {context.function_name}")
     logger.info(f"Model parameter paths - LLM: {BEDROCK_LLM_PARAM}, Embeddings: {EMBEDDING_MODEL_PARAM}")
+    
+    # Check if this is a WebSocket invocation
+    is_websocket = event.get("requestContext", {}).get("connectionId") is not None
+    logger.info(f"Request type: {'WebSocket' if is_websocket else 'API Gateway'}")
     
     # Extract parameters from the request
     query_params = event.get("queryStringParameters", {})
@@ -258,13 +308,28 @@ def handler(event, context):
         
         # Generate response using helper function
         try:
-            response_data = process_query(
-                query=question,
-                textbook_id=textbook_id,
-                retriever=retriever,
-                connection=connection,
-                chat_session_id=chat_session_id
-            )
+            if is_websocket:
+                # For WebSocket, use streaming response
+                connection_id = event['requestContext']['connectionId']
+                
+                response_data = process_query_streaming(
+                    query=question,
+                    textbook_id=textbook_id,
+                    retriever=retriever,
+                    connection=connection,
+                    chat_session_id=chat_session_id,
+                    websocket_endpoint=WEBSOCKET_API_ENDPOINT,
+                    connection_id=connection_id
+                )
+            else:
+                # For regular API, use non-streaming response
+                response_data = process_query(
+                    query=question,
+                    textbook_id=textbook_id,
+                    retriever=retriever,
+                    connection=connection,
+                    chat_session_id=chat_session_id
+                )
         except Exception as query_error:
             logger.error(f"Error processing query: {str(query_error)}", exc_info=True)
             response_data = {

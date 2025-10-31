@@ -10,6 +10,8 @@ import { Code, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
+import * as apigatewayv2 from "aws-cdk-lib/aws-apigatewayv2";
+import { WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { Fn } from "aws-cdk-lib";
 import { Asset } from "aws-cdk-lib/aws-s3-assets";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -45,6 +47,8 @@ export class ApiGatewayStack extends cdk.Stack {
   public addLayer = (name: string, layer: lambda.ILayerVersion) =>
     (this.layerList[name] = layer);
   public getLayers = () => this.layerList;
+  private readonly webSocketApi?: apigatewayv2.WebSocketApi;
+  public getWebSocketUrl = () => this.webSocketApi?.apiEndpoint ?? "";
 
   constructor(
     scope: Construct,
@@ -744,7 +748,6 @@ export class ApiGatewayStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: "ttl", // Enable TTL on the 'ttl' attribute
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use RETAIN for production
-      pointInTimeRecovery: false, // Enable for production if needed
     });
 
     // Create Bedrock Guardrails
@@ -1175,6 +1178,110 @@ export class ApiGatewayStack extends cdk.Stack {
     const cfnLambda_promptTemplate = lambdaPromptTemplateFunction.node
       .defaultChild as lambda.CfnFunction;
     cfnLambda_promptTemplate.overrideLogicalId("promptTemplateFunction");
+
+    // Define WebSocket API and related resources directly in ApiGatewayStack
+    this.webSocketApi = new apigatewayv2.WebSocketApi(
+      this,
+      `${id}-ChatWebSocketApi`,
+      {
+        apiName: `${id}-chat-websocket`,
+      }
+    );
+
+    // Connect Lambda
+    const connectFunction = new lambda.Function(this, `${id}-ConnectFunction`, {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: "connect.handler",
+      code: lambda.Code.fromAsset("lambda/websocket"),
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    // Disconnect Lambda
+    const disconnectFunction = new lambda.Function(
+      this,
+      `${id}-DisconnectFunction`,
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        handler: "disconnect.handler",
+        code: lambda.Code.fromAsset("lambda/websocket"),
+        timeout: cdk.Duration.seconds(30),
+      }
+    );
+
+    // Default route Lambda for handling messages
+    const defaultFunction = new lambda.Function(this, `${id}-DefaultFunction`, {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: "default.handler",
+      code: lambda.Code.fromAsset("lambda/websocket"),
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        TEXT_GEN_FUNCTION_NAME: textGenLambdaDockerFunc.functionName,
+      },
+    });
+
+    // Grant permissions to post to connections
+    const wsPolicy = new iam.PolicyStatement({
+      actions: ["execute-api:ManageConnections"],
+      resources: [
+        `arn:aws:execute-api:${this.region}:${this.account}:${this.webSocketApi.apiId}/*/*`,
+      ],
+    });
+
+    textGenLambdaDockerFunc.addToRolePolicy(wsPolicy);
+    connectFunction.addToRolePolicy(wsPolicy);
+    disconnectFunction.addToRolePolicy(wsPolicy);
+    defaultFunction.addToRolePolicy(wsPolicy);
+
+    // Grant the default function permission to invoke the text generation function
+    textGenLambdaDockerFunc.grantInvoke(defaultFunction);
+
+    // Routes
+    new apigatewayv2.WebSocketRoute(this, `${id}-ConnectRoute`, {
+      webSocketApi: this.webSocketApi,
+      routeKey: "$connect",
+      integration: new WebSocketLambdaIntegration(
+        `${id}-ConnectIntegration`,
+        connectFunction
+      ),
+    });
+
+    new apigatewayv2.WebSocketRoute(this, `${id}-DisconnectRoute`, {
+      webSocketApi: this.webSocketApi,
+      routeKey: "$disconnect",
+      integration: new WebSocketLambdaIntegration(
+        `${id}-DisconnectIntegration`,
+        disconnectFunction
+      ),
+    });
+
+    new apigatewayv2.WebSocketRoute(this, `${id}-DefaultRoute`, {
+      webSocketApi: this.webSocketApi,
+      routeKey: "$default",
+      integration: new WebSocketLambdaIntegration(
+        `${id}-DefaultIntegration`,
+        defaultFunction
+      ),
+    });
+
+    // Stage
+    const wsStage = new apigatewayv2.WebSocketStage(this, `${id}-ProdStage`, {
+      webSocketApi: this.webSocketApi,
+      stageName: "prod",
+      autoDeploy: true,
+    });
+
+    // Add environment variable to text generation function
+    textGenLambdaDockerFunc.addEnvironment(
+      "WEBSOCKET_API_ENDPOINT",
+      this.webSocketApi.apiEndpoint
+    );
+
+    // Add WebSocket URL as stack output
+    new cdk.CfnOutput(this, "WebSocketUrl", {
+      value: this.webSocketApi.apiEndpoint,
+      description: "WebSocket URL for real-time streaming",
+      exportName: `${id}-WebSocketUrl`,
+    });
 
     const lambdaSharedUserPromptFunction = new lambda.Function(
       this,
