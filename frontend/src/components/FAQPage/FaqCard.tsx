@@ -1,6 +1,12 @@
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Flag } from "lucide-react";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface FaqCardProps {
   question: string;
@@ -28,15 +34,36 @@ export function FaqCard({ question, count, onClick }: FaqCardProps) {
             {count}
           </p>
           {/* report button */}
-          <Button
-            variant={"link"}
-            className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <MoreHorizontal className="h-5 w-5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="link"
+                className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent 
+              className="w-fit min-w-0 p-1" 
+              side="top" 
+              align="end" 
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuItem
+                className="p-1 focus:bg-background focus:text-black hover:text-black text-muted-foreground cursor-pointer flex items-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log("Report clicked");
+                }}
+              >
+                <span >Report</span>
+                <Flag className="hover:text-black h-4 w-4 flex-shrink-0" />
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardFooter>
     </Card>

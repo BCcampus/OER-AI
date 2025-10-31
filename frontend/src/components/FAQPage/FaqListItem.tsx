@@ -1,5 +1,11 @@
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Flag } from "lucide-react";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface FaqListItemProps {
   question: string;
@@ -21,16 +27,37 @@ export function FaqListItem({ question, count, onClick }: FaqListItemProps) {
           {count} uses
         </p>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <MoreHorizontal className="h-5 w-5" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            <MoreHorizontal className="h-5 w-5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent 
+          className="w-auto min-w-0 p-1" 
+          side="top" 
+          align="end" 
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            className="p-1 focus:bg-background cursor-pointer flex items-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log("Report clicked");
+            }}
+          >
+            <span>Report</span>
+            <Flag className="h-4 w-4 flex-shrink-0" />
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
