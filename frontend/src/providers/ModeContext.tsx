@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import ModeContext, { type Mode } from "./mode";
-import { useUserSession } from "@/contexts/UserSessionContext";
+import { useUserSession } from "../providers/usersession";
 
 export function ModeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<Mode>("student");
