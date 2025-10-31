@@ -79,7 +79,6 @@ export default function FAQPage() {
           <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4 text-balance">
             Frequently Asked Questions
           </h1>
-          <p className="text-muted-foreground text-lg">click on a card to learn more.</p>
         </div>
 
         {/* Mobile: List View */}

@@ -1,4 +1,4 @@
-import { MoreHorizontal, Flag } from "lucide-react";
+import { MoreHorizontal, Flag, CornerUpRight } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -27,6 +27,7 @@ export function FaqListItem({ question, count, onClick }: FaqListItemProps) {
           {count} uses
         </p>
       </div>
+      <CornerUpRight className="h-5 w-5 text-muted-foreground flex-shrink-0 mr-2" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

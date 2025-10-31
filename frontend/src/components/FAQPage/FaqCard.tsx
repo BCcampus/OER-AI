@@ -1,5 +1,5 @@
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { MoreHorizontal, Flag } from "lucide-react";
+import { MoreHorizontal, Flag, CornerUpRight } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -30,9 +30,12 @@ export function FaqCard({ question, count, onClick }: FaqCardProps) {
 
       <CardFooter className="p-0">
         <div className="flex w-full items-center justify-between">
-          <p className="px-4 border rounded-lg text-sm font-medium">
-            {count}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="px-4 border rounded-lg text-sm font-medium">
+              {count}
+            </p>
+            <CornerUpRight className="h-4 w-4 text-muted-foreground" />
+          </div>
           {/* report button */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
