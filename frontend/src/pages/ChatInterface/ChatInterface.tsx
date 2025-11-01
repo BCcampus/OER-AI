@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
@@ -52,72 +52,77 @@ export default function AIChatPage() {
   const webSocketUrl = useMemo(() => import.meta.env.VITE_WEBSOCKET_URL, []);
   console.log("[WebSocket] Attempting connection to:", webSocketUrl);
 
-  // WebSocket message handlers
-  const handleWebSocketMessage = (message: any) => {
-    console.log("[WebSocket] Received message:", message);
+  // WebSocket message handlers - memoized to prevent unnecessary reconnections
+  const handleWebSocketMessage = useCallback(
+    (message: any) => {
+      console.log("[WebSocket] Received message:", message);
 
-    switch (message.type) {
-      case "start":
-        setIsStreaming(true);
-        break;
+      switch (message.type) {
+        case "start":
+          setIsStreaming(true);
+          break;
 
-      case "chunk":
-        if (message.content && streamingMessageId) {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === streamingMessageId
-                ? { ...msg, text: msg.text + message.content }
-                : msg
-            )
-          );
-        }
-        break;
+        case "chunk":
+          if (message.content && streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId
+                  ? { ...msg, text: msg.text + message.content }
+                  : msg
+              )
+            );
+          }
+          break;
 
-      case "complete":
-        setIsStreaming(false);
-        setStreamingMessageId(null);
-        if (message.sources && streamingMessageId) {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === streamingMessageId
-                ? { ...msg, sources_used: message.sources }
-                : msg
-            )
-          );
-        }
-        break;
+        case "complete":
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+          if (message.sources && streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId
+                  ? { ...msg, sources_used: message.sources }
+                  : msg
+              )
+            );
+          }
+          break;
 
-      case "error":
-        setIsStreaming(false);
-        setStreamingMessageId(null);
-        if (streamingMessageId) {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === streamingMessageId
-                ? { ...msg, text: message.message || "An error occurred" }
-                : msg
-            )
-          );
-        }
-        break;
-    }
-  };
+        case "error":
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+          if (streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId
+                  ? { ...msg, text: message.message || "An error occurred" }
+                  : msg
+              )
+            );
+          }
+          break;
+      }
+    },
+    [streamingMessageId]
+  ); // Only recreate when streamingMessageId changes
 
-  const { sendMessage: sendWebSocketMessage, isConnected } = useWebSocket(
-    webSocketUrl,
-    {
-      onMessage: handleWebSocketMessage,
-      onConnect: () => {
-        console.log("[WebSocket] Connected to:", webSocketUrl);
-      },
-      onDisconnect: () => {
-        console.log("[WebSocket] Disconnected from:", webSocketUrl);
-      },
-      onError: (error) => {
-        console.error("[WebSocket] Error:", error, "URL:", webSocketUrl);
-      },
-    }
-  );
+  const {
+    sendMessage: sendWebSocketMessage,
+    isConnected,
+    connectionState,
+    forceReconnect,
+  } = useWebSocket(webSocketUrl, {
+    onMessage: handleWebSocketMessage,
+    onConnect: () => {
+      console.log("[WebSocket] Connected to:", webSocketUrl);
+    },
+    onDisconnect: () => {
+      console.log("[WebSocket] Disconnected from:", webSocketUrl);
+    },
+    onError: (error) => {
+      console.error("[WebSocket] Error:", error, "URL:", webSocketUrl);
+    },
+  });
 
   // Load chat history and redirect if no chat session ID
   useEffect(() => {
@@ -393,16 +398,15 @@ export default function AIChatPage() {
         console.log("[WebSocket] Message sent successfully.");
         return;
       } else {
-        console.warn("[WebSocket] Message send failed. WebSocket not open.");
+        console.warn(
+          "[WebSocket] Message send failed. Attempting reconnect..."
+        );
+        forceReconnect();
       }
     } else {
-      if (!isConnected) {
-        console.warn("[WebSocket] Not connected. Falling back to HTTP.");
-      } else {
-        console.log(
-          "[WebSocket] Connection is active. Proceeding with WebSocket message."
-        );
-      }
+      console.warn(
+        `[WebSocket] Not connected (state: ${connectionState}). Falling back to HTTP.`
+      );
     }
 
     // Fallback to HTTP API if WebSocket is not available
@@ -537,6 +541,14 @@ export default function AIChatPage() {
                     placeholder={`Ask anything about ${textbookTitle}`}
                     onSend={sendMessage}
                   />
+                  {/* Connection Status Indicator (for debugging) */}
+                  {import.meta.env.DEV && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      WebSocket: {connectionState} {isConnected && "🟢"}{" "}
+                      {connectionState === "connecting" && "🟡"}{" "}
+                      {connectionState === "disconnected" && "🔴"}
+                    </div>
+                  )}
                 </div>
 
                 {/* Prompt Suggestions */}
