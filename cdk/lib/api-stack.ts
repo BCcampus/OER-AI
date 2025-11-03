@@ -726,7 +726,7 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         parameterName: `/${id}/OER/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
-        stringValue: "meta.llama3-70b-instruct-v1:0",
+        stringValue: "gpt-oss-120b-instruct-v1:0",
       }
     );
 
@@ -737,6 +737,16 @@ export class ApiGatewayStack extends cdk.Stack {
         parameterName: `/${id}/OER/EmbeddingModelId`,
         description: "Parameter containing the Embedding Model ID",
         stringValue: "amazon.titan-embed-text-v2:0",
+      }
+    );
+
+    const bedrockRegionParameter = new ssm.StringParameter(
+      this,
+      "BedrockRegionParameter",
+      {
+        parameterName: `/${id}/OER/BedrockRegion`,
+        description: "Parameter containing the Bedrock runtime region",
+        stringValue: "us-east-1",
       }
     );
 
@@ -878,6 +888,7 @@ export class ApiGatewayStack extends cdk.Stack {
           REGION: this.region,
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
+          BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
           TABLE_NAME_PARAM: sessionTable.tableName,
           GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
           //MESSAGE_LIMIT_PARAM: messageLimitParameter.parameterName,
@@ -928,8 +939,8 @@ export class ApiGatewayStack extends cdk.Stack {
         "bedrock:ApplyGuardrail",
       ],
       resources: [
-        `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1`,
-        `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
+        `arn:aws:bedrock:us-east-1::foundation-model/gpt-oss-120b-instruct-v1`,
+        `arn:aws:bedrock:us-east-1::foundation-model/gpt-oss-120b-instruct-v1:0`,
         `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
         `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
       ],
@@ -955,6 +966,7 @@ export class ApiGatewayStack extends cdk.Stack {
         resources: [
           bedrockLLMParameter.parameterArn,
           embeddingModelParameter.parameterArn,
+          bedrockRegionParameter.parameterArn,
           guardrailParameter.parameterArn,
           //messageLimitParameter.parameterArn,
         ],

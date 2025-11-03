@@ -25,7 +25,8 @@ if not TABLE_NAME:
 
 def get_bedrock_llm(
     bedrock_llm_id: str,
-    temperature: float = 0
+    temperature: float = 0.7,
+    bedrock_region: str = None
 ) -> ChatBedrock:
     """
     Create a Bedrock LLM instance based on the provided model ID.
@@ -33,6 +34,7 @@ def get_bedrock_llm(
     Args:
     bedrock_llm_id (str): The unique identifier for the Bedrock LLM model.
     temperature (float, optional): The temperature parameter for the LLM. Defaults to 0.
+    bedrock_region (str, optional): The AWS region for the Bedrock service. If None, uses REGION env var.
 
     Returns:
     ChatBedrock: An instance of the Bedrock LLM
@@ -41,6 +43,13 @@ def get_bedrock_llm(
         logger.info(f"Initializing Bedrock LLM with ID: '{bedrock_llm_id}'")
         logger.info(f"Current environment: REGION={os.environ.get('REGION', 'not set')}")
         
+        # Use the provided Bedrock region or fall back to environment variable
+        if bedrock_region is None:
+            bedrock_region = os.environ.get('REGION', 'us-east-1')
+            logger.warning(f"No Bedrock region provided, using: {bedrock_region}")
+        else:
+            logger.info(f"Using provided Bedrock region: {bedrock_region}")
+        
         # Default model parameters for most models
         model_kwargs = {
             "temperature": temperature,
@@ -48,7 +57,13 @@ def get_bedrock_llm(
         }
         
         # Special handling for different model families
-        if "llama" in bedrock_llm_id.lower():
+        if "gpt-oss" in bedrock_llm_id.lower():
+            logger.info("Using GPT-OSS specific parameters")
+            model_kwargs = {
+                "temperature": temperature,
+                "max_completion_tokens": 4096
+            }
+        elif "llama" in bedrock_llm_id.lower():
             logger.info("Using llama-specific parameters")
             model_kwargs = {
                 "temperature": temperature,
@@ -70,14 +85,9 @@ def get_bedrock_llm(
         
         logger.info(f"Model parameters: {json.dumps(model_kwargs)}")
         
-        # Create Bedrock runtime client for this region
-        region = os.environ.get('REGION')
-        if region:
-            bedrock_runtime = boto3.client("bedrock-runtime", region_name=region)
-            logger.info(f"Created Bedrock runtime client for region: {region}")
-        else:
-            logger.warning("REGION environment variable not set, using default region")
-            bedrock_runtime = boto3.client("bedrock-runtime")
+        # Create Bedrock runtime client for the specified region
+        logger.info(f"Creating Bedrock runtime client for region: {bedrock_region}")
+        bedrock_runtime = boto3.client("bedrock-runtime", region_name=bedrock_region)
         
         # Create and return the ChatBedrock instance
         logger.info(f"Creating ChatBedrock instance for model: {bedrock_llm_id}")

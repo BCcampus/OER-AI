@@ -17,6 +17,7 @@ REGION = os.environ["REGION"]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
 BEDROCK_LLM_PARAM = os.environ.get("BEDROCK_LLM_PARAM")
 EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
+BEDROCK_REGION_PARAM = os.environ.get("BEDROCK_REGION_PARAM")
 GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
 WEBSOCKET_API_ENDPOINT = os.environ.get("WEBSOCKET_API_ENDPOINT", "")
 # AWS Clients
@@ -28,6 +29,7 @@ connection = None
 db_secret = None
 BEDROCK_LLM_ID = None
 EMBEDDING_MODEL_ID = None
+BEDROCK_REGION = None
 GUARDRAIL_ID = None
 embeddings = None
 
@@ -53,9 +55,17 @@ def get_parameter(param_name, cached_var):
     return cached_var
 
 def initialize_constants():
-    global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, GUARDRAIL_ID, embeddings
+    global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, BEDROCK_REGION, GUARDRAIL_ID, embeddings
     BEDROCK_LLM_ID = get_parameter(BEDROCK_LLM_PARAM, BEDROCK_LLM_ID)
     EMBEDDING_MODEL_ID = get_parameter(EMBEDDING_MODEL_PARAM, EMBEDDING_MODEL_ID)
+    
+    # Get Bedrock region parameter
+    if BEDROCK_REGION_PARAM:
+        BEDROCK_REGION = get_parameter(BEDROCK_REGION_PARAM, BEDROCK_REGION)
+        logger.info(f"Using Bedrock region: {BEDROCK_REGION}")
+    else:
+        BEDROCK_REGION = REGION
+        logger.info(f"BEDROCK_REGION_PARAM not configured, using deployment region: {BEDROCK_REGION}")
     
     # Handle guardrail ID parameter - it might not be configured
     if GUARDRAIL_ID_PARAM:
@@ -65,6 +75,7 @@ def initialize_constants():
         logger.info("GUARDRAIL_ID_PARAM not configured, guardrails will be disabled")
 
     if embeddings is None:
+        # Use the deployment region for embeddings (they should be in the same region as the deployment)
         embeddings = BedrockEmbeddings(
             model_id=EMBEDDING_MODEL_ID,
             client=bedrock_runtime,
@@ -112,7 +123,7 @@ def process_query_streaming(query, textbook_id, retriever, chat_session_id, webs
     try:
         # Initialize LLM
         logger.info(f"Initializing Bedrock LLM with model ID: {BEDROCK_LLM_ID}")
-        llm = get_bedrock_llm(BEDROCK_LLM_ID)
+        llm = get_bedrock_llm(BEDROCK_LLM_ID, bedrock_region=BEDROCK_REGION)
         
         # Use the streaming helper function from chat.py
         logger.info(f"Calling get_response_streaming with textbook_id: {textbook_id}")
@@ -167,7 +178,7 @@ def process_query(query, textbook_id, retriever, chat_session_id, connection=Non
     try:
         # Initialize LLM
         logger.info(f"Initializing Bedrock LLM with model ID: {BEDROCK_LLM_ID}")
-        llm = get_bedrock_llm(BEDROCK_LLM_ID)
+        llm = get_bedrock_llm(BEDROCK_LLM_ID, bedrock_region=BEDROCK_REGION)
         
         # Test the LLM with a simple message to verify it works
         try:
@@ -216,7 +227,7 @@ def handler(event, context):
     logger.info(f"AWS Region: {REGION}")
     logger.info(f"Lambda function ARN: {context.invoked_function_arn}")
     logger.info(f"Lambda function name: {context.function_name}")
-    logger.info(f"Model parameter paths - LLM: {BEDROCK_LLM_PARAM}, Embeddings: {EMBEDDING_MODEL_PARAM}")
+    logger.info(f"Model parameter paths - LLM: {BEDROCK_LLM_PARAM}, Embeddings: {EMBEDDING_MODEL_PARAM}, Bedrock Region: {BEDROCK_REGION_PARAM}")
     
     # Check if this is a WebSocket invocation
     is_websocket = event.get("requestContext", {}).get("connectionId") is not None
@@ -236,6 +247,7 @@ def handler(event, context):
 
     try:
         initialize_constants()
+        logger.info(f"✅ Initialized constants - LLM: {BEDROCK_LLM_ID}, Embeddings: {EMBEDDING_MODEL_ID}, Bedrock Region: {BEDROCK_REGION}")
     except Exception as e:
         logger.error(f"❌ Failed to initialize constants: {e}")
         return {
