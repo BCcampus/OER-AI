@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
 import { useTextbookView } from "@/providers/textbookView";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import type { PromptTemplate, SharedUserPrompt } from "@/types/Chat";
 import { useUserSession } from "@/providers/usersession";
 import { useMode } from "@/providers/mode";
@@ -17,6 +18,7 @@ type Message = {
   text: string;
   sources_used?: string[];
   time: number;
+  isTyping?: boolean;
 };
 
 export default function AIChatPage() {
@@ -28,19 +30,34 @@ export default function AIChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [seeMore, setSeeMore] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  const { 
-    textbook, 
-    activeChatSessionId, 
+  const {
+    textbook,
+    activeChatSessionId,
     chatSessions,
     createNewChatSession,
-    isLoadingChatSessions 
+    isLoadingChatSessions,
   } = useTextbookView();
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
+    null
+  );
+
   const { sessionUuid } = useUserSession();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { mode } = useMode();
 
   const textbookTitle = textbook?.title ?? "Calculus: Volume 3";
+
+  // Auto-scroll to bottom when messages change or when typing starts
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   // Initialize chat session if needed
   useEffect(() => {
@@ -50,15 +67,115 @@ export default function AIChatPage() {
 
       // If no active chat session and no existing sessions, create one
       if (!activeChatSessionId && chatSessions.length === 0) {
-        console.log('No chat sessions found, creating new one');
+        console.log("No chat sessions found, creating new one");
         await createNewChatSession();
       }
     };
 
     initializeChatSession();
-  }, [activeChatSessionId, chatSessions.length, isLoadingChatSessions, createNewChatSession]);
+  }, [
+    activeChatSessionId,
+    chatSessions.length,
+    isLoadingChatSessions,
+    createNewChatSession,
+  ]);
 
-  // Load chat history when chat session changes
+  // WebSocket configuration
+  const webSocketUrl = useMemo(() => import.meta.env.VITE_WEBSOCKET_URL, []);
+  console.log("[WebSocket] Attempting connection to:", webSocketUrl);
+
+  // WebSocket message handlers - memoized to prevent unnecessary reconnections
+  const handleWebSocketMessage = useCallback(
+    (message: any) => {
+      console.log("[WebSocket] Received message:", message);
+
+      switch (message.type) {
+        case "start":
+          setIsStreaming(true);
+          // Update the streaming message to show typing indicator
+          if (streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId ? { ...msg, isTyping: true } : msg
+              )
+            );
+          }
+          break;
+
+        case "chunk":
+          if (message.content && streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId
+                  ? {
+                      ...msg,
+                      text: msg.text + message.content,
+                      isTyping: false,
+                    }
+                  : msg
+              )
+            );
+          }
+          break;
+
+        case "complete":
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+          if (message.sources && streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId
+                  ? { ...msg, sources_used: message.sources, isTyping: false }
+                  : msg
+              )
+            );
+          }
+          break;
+
+        case "error":
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+          if (streamingMessageId) {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingMessageId
+                  ? {
+                      ...msg,
+                      text: message.message || "An error occurred",
+                      isTyping: false,
+                    }
+                  : msg
+              )
+            );
+          }
+          break;
+      }
+    },
+    [streamingMessageId]
+  ); // Only recreate when streamingMessageId changes
+
+  const {
+    sendMessage: sendWebSocketMessage,
+    isConnected,
+    connectionState,
+    forceReconnect,
+  } = useWebSocket(webSocketUrl, {
+    onMessage: handleWebSocketMessage,
+    onConnect: () => {
+      console.log("[WebSocket] Connected to:", webSocketUrl);
+      console.log("Streaming: ", isStreaming);
+    },
+    onDisconnect: () => {
+      console.log("[WebSocket] Disconnected from:", webSocketUrl);
+      console.log("Streaming: ", isStreaming);
+    },
+    onError: (error) => {
+      console.error("[WebSocket] Error:", error, "URL:", webSocketUrl);
+      console.log("Streaming: ", isStreaming);
+    },
+  });
+
+  // Load chat history and redirect if no chat session ID
   useEffect(() => {
     if (!activeChatSessionId) {
       return;
@@ -188,7 +305,9 @@ export default function AIChatPage() {
 
       // Pass role as query param to backend
       const response = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/shared_prompts?role=${mode}`,
+        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${
+          textbook.id
+        }/shared_prompts?role=${mode}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -215,9 +334,61 @@ export default function AIChatPage() {
       time: Date.now(),
     };
 
-    // append user message
-    setMessages((m) => [...m, userMsg]);
+    // Create bot message placeholder for streaming
+    const botMsg: Message = {
+      id: `${Date.now() + 1}-${Math.random().toString(36).slice(2, 9)}`,
+      sender: "bot",
+      text: "",
+      sources_used: [],
+      time: Date.now() + 1,
+      isTyping: true, // Start with typing indicator
+    };
+
+    // append user and bot messages
+    setMessages((m) => [...m, userMsg, botMsg]);
     setMessage("");
+    setStreamingMessageId(botMsg.id);
+    setIsStreaming(true);
+
+    // Try WebSocket streaming first, fallback to HTTP if not connected
+    if (isConnected && webSocketUrl) {
+      console.log("[WebSocket] Sending message via WebSocket:", {
+        action: "generate_text",
+        textbook_id: textbook.id,
+        query: text,
+        chat_session_id: activeChatSessionId,
+      });
+      const success = sendWebSocketMessage({
+        action: "generate_text",
+        textbook_id: textbook.id,
+        query: text,
+        chat_session_id: activeChatSessionId,
+      });
+
+      if (success) {
+        console.log("[WebSocket] Message sent successfully.");
+        return;
+      } else {
+        console.warn(
+          "[WebSocket] Message send failed. Attempting reconnect..."
+        );
+        forceReconnect();
+      }
+    } else {
+      console.warn(
+        `[WebSocket] Not connected (state: ${connectionState}). Falling back to HTTP.`
+      );
+    }
+
+    // Fallback to HTTP API if WebSocket is not available
+    console.log("[WebSocket] Fallback: Sending message via HTTP API...");
+
+    // Show typing indicator for HTTP fallback
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === botMsg.id ? { ...msg, isTyping: true } : msg
+      )
+    );
 
     try {
       // Get fresh token for the request
@@ -249,23 +420,36 @@ export default function AIChatPage() {
 
       const data = await response.json();
 
-      const botMsg: Message = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        sender: "bot",
-        text: data.response || "Sorry, I couldn't generate a response.",
-        sources_used: data.sources || [],
-        time: Date.now(),
-      };
-      setMessages((m) => [...m, botMsg]);
+      // Update the bot message with the complete response
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsg.id
+            ? {
+                ...msg,
+                text: data.response || "Sorry, I couldn't generate a response.",
+                sources_used: data.sources || [],
+                isTyping: false,
+              }
+            : msg
+        )
+      );
     } catch (error) {
       console.error("Error generating text:", error);
-      const errorMsg: Message = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-        sender: "bot",
-        text: "Sorry, there was an error processing your request.",
-        time: Date.now(),
-      };
-      setMessages((m) => [...m, errorMsg]);
+      // Update the bot message with error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsg.id
+            ? {
+                ...msg,
+                text: "Sorry, there was an error processing your request.",
+                isTyping: false,
+              }
+            : msg
+        )
+      );
+    } finally {
+      setIsStreaming(false);
+      setStreamingMessageId(null);
     }
   }
 
@@ -284,6 +468,7 @@ export default function AIChatPage() {
           key={message.id}
           text={message.text}
           sources={message.sources_used}
+          isTyping={message.isTyping}
         />
       );
     }
@@ -324,7 +509,10 @@ export default function AIChatPage() {
                     </p>
                   </div>
                 ) : (
-                  messages.map((m) => messageFormatter(m))
+                  <>
+                    {messages.map((m) => messageFormatter(m))}
+                    <div ref={messagesEndRef} />
+                  </>
                 )}
               </div>
             )}
@@ -340,6 +528,14 @@ export default function AIChatPage() {
                 placeholder={`Ask anything about ${textbookTitle}`}
                 onSend={sendMessage}
               />
+              {/* Connection Status Indicator (for debugging) */}
+              {import.meta.env.DEV && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  WebSocket: {connectionState} {isConnected && "🟢"}{" "}
+                  {connectionState === "connecting" && "🟡"}{" "}
+                  {connectionState === "disconnected" && "🔴"}
+                </div>
+              )}
             </div>
 
             {/* Prompt Suggestions */}
