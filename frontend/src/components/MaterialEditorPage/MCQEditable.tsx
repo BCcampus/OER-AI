@@ -5,7 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import type { IH5PQuestion } from "@/types/MaterialEditor";
 import { Separator } from "../ui/separator";
 import { Label } from "../ui/label";
-import { CheckCircle, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CheckCircle, XCircle, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MCQEditableProps {
@@ -102,6 +103,56 @@ export function MCQEditable({
     });
   };
 
+  const handleAddAnswer = () => {
+    const newAnswers = [
+      ...question.params.answers,
+      {
+        text: "New answer option",
+        correct: false,
+        tipsAndFeedback: {
+          tip: "",
+          chosenFeedback: "",
+          notChosenFeedback: "",
+        },
+      },
+    ];
+    onUpdate({
+      ...question,
+      params: {
+        ...question.params,
+        answers: newAnswers,
+      },
+    });
+  };
+
+  const handleDeleteAnswer = (index: number) => {
+    if (question.params.answers.length <= 1) {
+      return; // Don't allow deleting the last option
+    }
+
+    const newAnswers = question.params.answers.filter((_, i) => i !== index);
+    
+    // If we deleted the correct answer, make the first answer correct
+    if (index === correctAnswerIndex) {
+      newAnswers[0] = {
+        ...newAnswers[0],
+        correct: true,
+      };
+      setCorrectAnswerIndex(0);
+    } else if (correctAnswerIndex !== null && index < correctAnswerIndex) {
+      // Adjust the correct answer index if we deleted an answer before it
+      setCorrectAnswerIndex(correctAnswerIndex - 1);
+    }
+
+    onUpdate({
+      ...question,
+      params: {
+        ...question.params,
+        answers: newAnswers,
+      },
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -120,24 +171,37 @@ export function MCQEditable({
         {/* Answer Options */}
         {question.params.answers.map((answer, index) => (
           <>
-            <Label
-              className={cn(
-                `${
-                  index !== correctAnswerIndex && "cursor-pointer"
-                } text-sm font-normal text-muted-foreground`
-              )}
-              onClick={() => handleCorrectToggle(index)}
-            >
-              {answer.correct ? (
-                <CheckCircle className="h-4 w-4 text-green-600"></CheckCircle>
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600"></XCircle>
-              )}
-              {answer.correct ? " Correct Answer" : " Incorrect Answer"}
-            </Label>
+            <div className="flex items-center justify-between w-full">
+              <Label
+                className={cn(
+                  `${
+                    index !== correctAnswerIndex && "cursor-pointer"
+                  } text-sm font-normal text-muted-foreground`
+                )}
+                onClick={() => handleCorrectToggle(index)}
+              >
+                {answer.correct ? (
+                  <CheckCircle className="h-4 w-4 text-green-600"></CheckCircle>
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-600"></XCircle>
+                )}
+                {answer.correct ? " Correct Answer" : " Incorrect Answer"}
+              </Label>
+              
+              <Button
+                variant="link"
+                size="icon"
+                onClick={() => handleDeleteAnswer(index)}
+                disabled={question.params.answers.length <= 1}
+                className="cursor-pointer h-fit w-fit text-destructive hover:text-destructive disabled:opacity-50">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+            
             <div key={index} className="flex flex-col items-start mt-1">
               <div className="flex-1 w-full">
                 <Input
+                placeholder="Answer option text"
                   value={answer.text}
                   onChange={(e) =>
                     handleAnswerTextChange(index, e.target.value)
@@ -202,6 +266,16 @@ export function MCQEditable({
             </div>
           </>
         ))}
+        
+        {/* Add Answer Button */}
+        <Button
+          variant="outline"
+          onClick={handleAddAnswer}
+          className="cursor-pointer w-full mt-4"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Answer Option
+        </Button>
       </CardContent>
     </Card>
   );
