@@ -1355,45 +1355,79 @@ export class ApiGatewayStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnLambda_sharedUserPrompt.overrideLogicalId("sharedUserPromptFunction");
 
-    // Practice Material Lambda (Node.js)
-    const lambdaPracticeMaterialFunction = new lambda.Function(
+    // Practice Material Lambda (Docker)
+    const practiceMaterialDockerFunc = new lambda.DockerImageFunction(
       this,
-      `${id}-practiceMaterialFunction`,
+      `${id}-PracticeMaterialLambdaDockerFunction`,
       {
-        runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda"),
-        handler: "handlers/practiceMaterialHandler.handler",
-        timeout: Duration.seconds(120),
+        code: lambda.DockerImageCode.fromEcr(
+          props.ecrRepositories["practiceMaterial"],
+          { tagOrDigest: "latest" }
+        ),
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(120),
         vpc: vpcStack.vpc,
+        functionName: `${id}-PracticeMaterialLambdaDockerFunction`,
         environment: {
           REGION: this.region,
-          // Default Titan model for practice material generation; can be overridden later
-          PRACTICE_MATERIAL_MODEL_ID: "amazon.titan-text-express-v1",
+          // DB + RDS for embeddings access
+          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
+          // Models - SSM parameter names (not hardcoded values)
+          PRACTICE_MATERIAL_MODEL_PARAM: bedrockLLMParameter.parameterName,
+          EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
+          BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
         },
-        functionName: `${id}-practiceMaterialFunction`,
-        memorySize: 512,
         role: lambdaRole,
       }
     );
 
-    lambdaPracticeMaterialFunction.addPermission("AllowApiGatewayInvoke", {
+    // API Gateway permission
+    practiceMaterialDockerFunc.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks/*/practice_materials*`,
     });
 
-    const cfnLambda_practiceMaterial = lambdaPracticeMaterialFunction.node
+    // Logical ID override
+    const cfnPracticeMaterialDocker = practiceMaterialDockerFunc.node
       .defaultChild as lambda.CfnFunction;
-    cfnLambda_practiceMaterial.overrideLogicalId("practiceMaterialFunction");
+    cfnPracticeMaterialDocker.overrideLogicalId("practiceMaterialFunction");
 
-    // Bedrock permissions for practice material generator
-    lambdaPracticeMaterialFunction.addToRolePolicy(
+    // IAM: Secrets, SSM, Bedrock
+    practiceMaterialDockerFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: [
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
+        ],
+      })
+    );
+
+    practiceMaterialDockerFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["ssm:GetParameter"],
+        resources: [
+          bedrockLLMParameter.parameterArn,
+          embeddingModelParameter.parameterArn,
+          bedrockRegionParameter.parameterArn,
+        ],
+      })
+    );
+
+    practiceMaterialDockerFunc.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["bedrock:InvokeModel"],
         resources: [
-          // Titan text express in this region
-          `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-text-express-v1`,
+          // Nova Pro inference profile (for text generation)
+          `arn:aws:bedrock:us-east-1:784303385514:inference-profile/us.amazon.nova-pro-v1:0`,
+          // Nova Pro foundation model
+          `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0`,
+          // Titan embeddings model (for retrieval)
+          `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
         ],
       })
     );
