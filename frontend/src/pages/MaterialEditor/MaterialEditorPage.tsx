@@ -105,9 +105,9 @@ export default function MaterialEditorPage() {
     setQuestionSets((prev) => [...prev, dummyQuestionSet]);
   };
 
-  const handleExportQuestionSet = (questionSet: IH5PMinimalQuestionSet) => {
+  const handleExportToH5P = (questionSet: IH5PMinimalQuestionSet) => {
     console.log("Exporting question set:", questionSet);
-    // Default export behavior is handled in MCQEditableContainer
+    // TODO: call api to export question as h5p
   };
 
   return (
@@ -131,7 +131,7 @@ export default function MaterialEditorPage() {
               <MCQEditableContainer
                 key={index}
                 initialQuestionSet={questionSet}
-                onExport={handleExportQuestionSet}
+                exportToH5P={handleExportToH5P}
                 onDelete={() => {handleQuizDelete(index)}}
               />
             ))

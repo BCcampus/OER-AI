@@ -5,21 +5,23 @@ import { Input } from "@/components/ui/input";
 import { MCQEditable } from "./MCQEditable";
 import type { IH5PMinimalQuestionSet, IH5PQuestion } from "@/types/MaterialEditor";
 import { ChevronDown, ChevronUp, Download, Plus, Trash2 } from "lucide-react";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 interface MCQEditableContainerProps {
   initialQuestionSet: IH5PMinimalQuestionSet;
-  onExport: (questionSet: IH5PMinimalQuestionSet) => void;
+  exportToH5P: (questionSet: IH5PMinimalQuestionSet) => void;
   onDelete: () => void;
 }
 
 export function MCQEditableContainer({
   initialQuestionSet,
-  onExport,
+  exportToH5P: onExport,
   onDelete,
 }: MCQEditableContainerProps) {
   const [questionSet, setQuestionSet] = useState<IH5PMinimalQuestionSet>(initialQuestionSet);
   const [isExpanded, setIsExpanded] = useState(true);
   const [title, setTitle] = useState("Untitled Quiz");
+  const [exportFormat, setExportFormat] = useState<string>("json");
 
   const handleQuestionUpdate = (index: number, updatedQuestion: IH5PQuestion) => {
     const newQuestions = [...questionSet.questions];
@@ -63,11 +65,36 @@ export function MCQEditableContainer({
     setQuestionSet({ questions: newQuestions });
   };
 
-  const handleExport = () => {
-
-    onExport(questionSet);
-
+  const downloadFile = (contents: string, filename: string, mime = "application/json") => {
+    const blob = new Blob([contents], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
+
+  const exportAsJSON = (qs = questionSet) => {
+    const contents = JSON.stringify(qs, null, 2);
+    downloadFile(contents, `${title || "quiz"}.json`, "application/json");
+  };
+  
+
+  const handleExport = () => {
+    if (exportFormat === "json") {
+      exportAsJSON();
+      return;
+    }
+
+    if (exportFormat === "h5p") {
+      // use parents h5p api exporter
+      onExport(questionSet);
+    }
+  };
+
 
   return (
     <Card>
@@ -107,8 +134,7 @@ export function MCQEditableContainer({
                 e.stopPropagation();
                 onDelete();
               }}
-              aria-label="Delete quiz"
-              className="w-fit h-fit text-destructive hover:text-destructive"
+              className="cursor-pointer h-fit text-destructive hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -129,20 +155,35 @@ export function MCQEditableContainer({
             ))}
           </CardContent>
 
-          <CardFooter className="flex flex-col sm:flex-row gap-2 justify-end">
-            <Button variant="outline" onClick={handleAddQuestion} className="w-full sm:w-auto">
+          <CardFooter className="flex flex-col md:flex-row gap-2 justify-end">
+            <Button variant="outline" onClick={handleAddQuestion} className="cursor-pointer w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               Add Question
             </Button>
-            <Button
-              onClick={handleExport}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
+
+            <div className="flex w-full md:w-fit gap-2">
+
+              <Select value={exportFormat} onValueChange={(v) => setExportFormat(v)}> 
+                <SelectTrigger className="bg-background border border-text-muted-foreground cursor-pointer w-[50%] md:w-fit sm:w-auto">
+                  Export as: <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem className="cursor-pointer" value="json">JSON</SelectItem>
+                  <SelectItem className="cursor-pointer" value="h5p">H5P</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                onClick={handleExport}
+                className="cursor-pointer w-[50%] md:w-fit sm:w-auto"
+              >
+                Export
+                <Download className="h-4 w-4 mr-2" />
+              </Button>
+            </div>
           </CardFooter>
         </>
-      )}
+      )} 
     </Card>
   );
 }
