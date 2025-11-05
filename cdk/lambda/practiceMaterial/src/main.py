@@ -21,7 +21,7 @@ BEDROCK_REGION_PARAM = os.environ.get("BEDROCK_REGION_PARAM")
 # Clients
 secrets_manager = boto3.client("secretsmanager", region_name=REGION)
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
+# bedrock_runtime will be initialized in initialize_constants() with the correct region
 
 # Cache
 _db_secret: Dict[str, Any] | None = None
@@ -29,6 +29,7 @@ _practice_material_model_id: str | None = None
 _embedding_model_id: str | None = None
 _bedrock_region: str | None = None
 _embeddings = None
+_bedrock_runtime = None
 
 
 def get_secret_dict(name: str) -> Dict[str, Any]:
@@ -53,7 +54,7 @@ def get_parameter(param_name: str | None, cached_var: str | None) -> str | None:
 
 def initialize_constants():
     """Initialize model IDs and region from SSM parameters"""
-    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings
+    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _bedrock_runtime
     
     # Get practice material model ID from SSM
     _practice_material_model_id = get_parameter(PRACTICE_MATERIAL_MODEL_PARAM, _practice_material_model_id)
@@ -71,12 +72,17 @@ def initialize_constants():
         _bedrock_region = REGION
         logger.info(f"BEDROCK_REGION_PARAM not configured, using deployment region: {_bedrock_region}")
     
-    # Initialize embeddings
+    # Initialize bedrock_runtime client with the correct region (matching textGeneration pattern)
+    if _bedrock_runtime is None:
+        _bedrock_runtime = boto3.client("bedrock-runtime", region_name=_bedrock_region)
+        logger.info(f"Initialized bedrock_runtime client for region: {_bedrock_region}")
+    
+    # Initialize embeddings (use deployment region, matching textGeneration pattern)
     if _embeddings is None:
         _embeddings = BedrockEmbeddings(
             model_id=_embedding_model_id,
-            client=bedrock_runtime,
-            region_name=_bedrock_region,
+            client=boto3.client("bedrock-runtime", region_name=REGION),  # Separate client for embeddings in deployment region
+            region_name=REGION,  # Use deployment region for embeddings, not _bedrock_region
         )
 
 
@@ -221,7 +227,7 @@ def handler(event, context):
                 "topP": 0.9,
             },
         }
-        resp = bedrock_runtime.invoke_model(
+        resp = _bedrock_runtime.invoke_model(
             modelId=_practice_material_model_id,
             contentType="application/json",
             accept="application/json",
@@ -241,7 +247,7 @@ def handler(event, context):
             logger.warning(f"First parse/validation failed: {e1}")
             retry_prompt = prompt + "\n\nIMPORTANT: Your previous response was invalid. You MUST return valid JSON only, exactly matching the schema and lengths. No extra commentary."
             payload["inputText"] = retry_prompt
-            resp2 = bedrock_runtime.invoke_model(
+            resp2 = _bedrock_runtime.invoke_model(
                 modelId=_practice_material_model_id,
                 contentType="application/json",
                 accept="application/json",
