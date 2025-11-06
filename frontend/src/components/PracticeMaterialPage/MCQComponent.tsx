@@ -47,10 +47,10 @@ export function MCQQuestionComponent({
   return (
     <Card>
       <CardHeader className="px-4">
-        <CardTitle className="text-lg font-semibold">
+        <CardTitle className="text-sm font-semibold text-muted-foreground">
           Question {questionNumber}
         </CardTitle>
-        <CardDescription className="text-muted-foreground text-sm">
+        <CardDescription className="text-black text-md">
           {question.questionText}
         </CardDescription>
       </CardHeader>
