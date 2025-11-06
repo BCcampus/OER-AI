@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
@@ -22,6 +23,9 @@ type Message = {
 };
 
 export default function AIChatPage() {
+  // URL search params for pre-filled questions (from FAQ page)
+  const [searchParams, setSearchParams] = useSearchParams();
+  
   // State
   const [message, setMessage] = useState("");
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
@@ -462,6 +466,25 @@ export default function AIChatPage() {
       setStreamingMessageId(null);
     }
   }
+
+  // Handle pre-filled question from URL (e.g., from FAQ page)
+  useEffect(() => {
+    const question = searchParams.get("question");
+    if (question && activeChatSessionId && textbook && !isStreaming && messages.length === 0) {
+      // Set the message and trigger send
+      setMessage(question);
+      
+      // Clear the URL parameter
+      setSearchParams({});
+      
+      // Send the message after a brief delay to ensure state updates
+      setTimeout(() => {
+        if (question.trim()) {
+          sendMessage();
+        }
+      }, 100);
+    }
+  }, [searchParams, activeChatSessionId, textbook, isStreaming, messages.length]);
 
   function messageFormatter(message: Message) {
     if (message.sender === "user") {

@@ -1101,6 +1101,43 @@ export class ApiGatewayStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnLambda_textbook.overrideLogicalId("textbookFunction");
 
+    // FAQ Lambda Function
+    const lambdaFaqFunction = new lambda.Function(
+      this,
+      `${id}-faqFunction`,
+      {
+        runtime: lambda.Runtime.NODEJS_22_X,
+        code: lambda.Code.fromAsset("lambda"),
+        handler: "handlers/faqHandler.handler",
+        timeout: Duration.seconds(300),
+        vpc: vpcStack.vpc,
+        environment: {
+          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
+        },
+        functionName: `${id}-faqFunction`,
+        memorySize: 512,
+        layers: [postgres],
+        role: lambdaRole,
+      }
+    );
+
+    lambdaFaqFunction.addPermission("AllowApiGatewayInvoke", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks/*/faq*`,
+    });
+
+    lambdaFaqFunction.addPermission("AllowFaqInvoke", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/faq*`,
+    });
+
+    const cfnLambda_faq = lambdaFaqFunction.node
+      .defaultChild as lambda.CfnFunction;
+    cfnLambda_faq.overrideLogicalId("faqFunction");
+
     const lambdaChatSessionFunction = new lambda.Function(
       this,
       `${id}-chatSessionFunction`,
