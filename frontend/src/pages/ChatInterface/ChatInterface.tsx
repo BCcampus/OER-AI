@@ -3,23 +3,17 @@ import { ChevronDown, LibraryBig } from "lucide-react";
 import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
+import GuidedQuestionMessage from "@/components/ChatInterface/GuidedQuestionMessage";
 import { Button } from "@/components/ui/button";
 import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
 import { useTextbookView } from "@/providers/textbookView";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import type { PromptTemplate, SharedUserPrompt } from "@/types/Chat";
+import type { PromptTemplate, SharedUserPrompt, GuidedPromptTemplate, GuidedPromptQuestion, Message } from "@/types/Chat";
 import { useUserSession } from "@/providers/usersession";
 import { useMode } from "@/providers/mode";
 
-type Message = {
-  id: string;
-  sender: "user" | "bot";
-  text: string;
-  sources_used?: string[];
-  time: number;
-  isTyping?: boolean;
-};
+
 
 export default function AIChatPage() {
   // State
@@ -49,6 +43,14 @@ export default function AIChatPage() {
   const { mode } = useMode();
 
   const textbookTitle = textbook?.title ?? "Calculus: Volume 3";
+
+  const [guidedState, setGuidedState] = useState<{
+    isActive: boolean;
+    templateId: string;
+    questions: GuidedPromptQuestion[];
+    currentIndex: number;
+    answers: string[];
+  }>({ isActive: false, templateId: '', questions: [], currentIndex: 0, answers: [] });
 
   // Auto-scroll to bottom when messages change or when typing starts
   const scrollToBottom = useCallback(() => {
@@ -291,8 +293,38 @@ export default function AIChatPage() {
 
     fetchPrompts();
   }, []);
+  
+  // Dummy guided prompt templates
+  const mockGuidedPrompts: GuidedPromptTemplate[] = [
+    {
+      id: '12312903810298301',
+      name: 'Create Quiz Questions',
+      description: 'Generate quiz questions for your course material',
+      type: 'guided',
+      visibility: 'public',
+      created_at: new Date().toISOString(),
+      questions: [
+        { id: 'q1', question_text: 'What topic should the quiz cover?', order_index: 0 },
+        { id: 'q2', question_text: 'How many questions do you want?', order_index: 1 },
+        { id: 'q3', question_text: 'What difficulty level?', order_index: 2 },
+        { id: 'q4', question_text: 'What question types do you prefer?', order_index: 3 }
+      ]
+    },
+    {
+      id: '098645827098312',
+      name: 'Create Lesson Plan',
+      description: 'Design a comprehensive lesson plan',
+      type: 'guided',
+      visibility: 'public',
+      created_at: new Date().toISOString(),
+      questions: [
+        { id: 'l1', question_text: 'What subject and grade level?', order_index: 0 },
+        { id: 'l2', question_text: 'How long is the lesson?', order_index: 1 },
+        { id: 'l3', question_text: 'What are the key learning objectives?', order_index: 2 }
+      ]
+    }
+  ];
 
-  // Fetch shared prompts from API filtered by current mode
   const fetchSharedPrompts = useCallback(async () => {
     if (!textbook?.id) return; // Need textbook_id
     try {
@@ -323,6 +355,34 @@ export default function AIChatPage() {
     }
   }, [textbook?.id, mode]);
 
+  const startGuidedConversation = (template: GuidedPromptTemplate) => {
+    if (!template.questions) return;
+    
+    setGuidedState({
+      isActive: true,
+      templateId: template.id,
+      questions: template.questions,
+      currentIndex: 0,
+      answers: []
+    });
+    
+    // Send first question as AI message
+    const firstQuestion = template.questions[0];
+    const aiMsg: Message = {
+      id: `guided-${Date.now()}`,
+      sender: 'bot',
+      text: firstQuestion.question_text,
+      time: Date.now(),
+      isGuidedQuestion: true,
+      guidedData: {
+        templateId: template.id,
+        questionIndex: 0,
+        totalQuestions: template.questions.length
+      }
+    };
+    setMessages(prev => [...prev, aiMsg]);
+  };
+
   async function sendMessage() {
     const text = message.trim();
     if (!text || !activeChatSessionId || !textbook) return;
@@ -333,6 +393,60 @@ export default function AIChatPage() {
       text,
       time: Date.now(),
     };
+
+    // Handle guided conversation
+    if (guidedState.isActive) {
+      const newAnswers = [...guidedState.answers, text];
+      const nextIndex = guidedState.currentIndex + 1;
+      
+      // Add user message
+      setMessages(prev => [...prev, userMsg]);
+      setMessage("");
+      
+      if (nextIndex < guidedState.questions.length) {
+        // Ask next question
+        const nextQuestion = guidedState.questions[nextIndex];
+        const aiMsg: Message = {
+          id: `guided-${Date.now()}`,
+          sender: 'bot',
+          text: nextQuestion.question_text,
+          time: Date.now() + 1,
+          isGuidedQuestion: true,
+          guidedData: {
+            templateId: guidedState.templateId,
+            questionIndex: nextIndex,
+            totalQuestions: guidedState.questions.length
+          }
+        };
+        
+        setMessages(prev => [...prev, aiMsg]);
+        setGuidedState(prev => ({
+          ...prev,
+          currentIndex: nextIndex,
+          answers: newAnswers
+        }));
+      } else {
+        // All questions answered, generate final input to send to text gen
+        // TODO: Format with the original prompt template text
+        const finalPrompt = `Answers: ${newAnswers.map((answer, i) => 
+          `${guidedState.questions[i].question_text}: ${answer}`
+        ).join(', ')}. Please help me with this task.`;
+        
+        setGuidedState({ isActive: false, templateId: '', questions: [], currentIndex: 0, answers: [] });
+        
+        // Continue with regular message flow using final prompt
+        const finalUserMsg: Message = {
+          id: `${Date.now()}-final`,
+          sender: "user",
+          text: finalPrompt,
+          time: Date.now() + 2,
+        };
+        setMessages(prev => [...prev, finalUserMsg]);
+        
+        return;
+      }
+      return;
+    }
 
     // Create bot message placeholder for streaming
     const botMsg: Message = {
@@ -460,6 +574,15 @@ export default function AIChatPage() {
           key={message.id}
           text={message.text}
           textbookId={textbook?.id || ""}
+        />
+      );
+    } else if (message.isGuidedQuestion && message.guidedData) {
+      return (
+        <GuidedQuestionMessage
+          key={message.id}
+          text={message.text}
+          questionIndex={message.guidedData.questionIndex}
+          totalQuestions={message.guidedData.totalQuestions}
         />
       );
     } else {
@@ -592,9 +715,11 @@ export default function AIChatPage() {
           onOpenChange={setShowLibrary}
           prompts={prompts}
           sharedPrompts={sharedPrompts}
+          guidedPrompts={mockGuidedPrompts}
           onSelectPrompt={(msg) => {
             setMessage(msg);
           }}
+          onSelectGuidedPrompt={startGuidedConversation}
           onFetchSharedPrompts={fetchSharedPrompts}
         />
       </div>
