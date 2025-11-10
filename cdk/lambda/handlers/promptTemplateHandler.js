@@ -212,16 +212,16 @@ exports.handler = async (event) => {
       case "POST /prompt_templates/{prompt_template_id}/questions":
         const newTemplateId = event.pathParameters?.prompt_template_id;
         const questionData = parseBody(event.body);
-        const { questions } = questionData;
+        const { questions: questionsToCreate } = questionData;
         
-        if (!newTemplateId || !questions || !Array.isArray(questions) || questions.length === 0) {
+        if (!newTemplateId || !questionsToCreate || !Array.isArray(questionsToCreate) || questionsToCreate.length === 0) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Template ID and questions array are required" });
           break;
         }
         
         const createdQuestions = [];
-        for (const question of questions) {
+        for (const question of questionsToCreate) {
           const { question_text, order_index } = question;
           if (!question_text || order_index === undefined) {
             response.statusCode = 400;
