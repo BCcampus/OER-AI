@@ -26,18 +26,33 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
   const [topic, setTopic] = useState("");
   const [numQuestions, setNumQuestions] = useState("5");
   const [numOptions, setNumOptions] = useState("4");
+  const [numCards, setNumCards] = useState("10");
+  const [cardType, setCardType] = useState("question-answer");
   const [difficulty, setDifficulty] = useState("intermediate");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     //generation logic handled my parent
-    onGenerate({
+    
+    const baseData = {
       materialType,
       topic,
-      numQuestions: parseInt(numQuestions),
-      numOptions: parseInt(numOptions),
       difficulty,
-    });
+    };
+
+    if (materialType === "mcq") {
+      onGenerate({
+        ...baseData,
+        numQuestions: parseInt(numQuestions),
+        numOptions: parseInt(numOptions),
+      });
+    } else if (materialType === "flashcards") {
+      onGenerate({
+        ...baseData,
+        numCards: parseInt(numCards),
+        cardType,
+      });
+    }
   };
 
   return (
@@ -61,6 +76,7 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="mcq">Multiple Choice Questions</SelectItem>
+                <SelectItem value="flashcards">Flashcards</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -115,6 +131,56 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
                 <Label htmlFor="difficulty">Difficulty</Label>
                 <Select value={difficulty} onValueChange={setDifficulty}>
                   <SelectTrigger className="border-grey w-full" id="difficulty">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="beginner">Beginner</SelectItem>
+                    <SelectItem value="intermediate">Intermediate</SelectItem>
+                    <SelectItem value="advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          {/* Flashcard-specific fields */}
+          {materialType === "flashcards" && (
+            <>
+              {/* Number of Cards */}
+              <div className="space-y-2">
+                <Label htmlFor="num-cards">Number of Cards</Label>
+                <Input
+                  id="num-cards"
+                  type="number"
+                  placeholder="Enter a number"
+                  min="5"
+                  max="30"
+                  value={numCards}
+                  onChange={(e) => setNumCards(e.target.value)}
+                  required
+                />
+              </div>
+
+              {/* Card Type */}
+              <div className="space-y-2">
+                <Label htmlFor="card-type">Card Type</Label>
+                <Select value={cardType} onValueChange={setCardType}>
+                  <SelectTrigger className="border-grey w-full" id="card-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="term-definition">Term & Definition</SelectItem>
+                    <SelectItem value="question-answer">Question & Answer</SelectItem>
+                    <SelectItem value="concept-example">Concept & Example</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Difficulty */}
+              <div className="space-y-2">
+                <Label htmlFor="difficulty-flashcard">Difficulty</Label>
+                <Select value={difficulty} onValueChange={setDifficulty}>
+                  <SelectTrigger className="border-grey w-full" id="difficulty-flashcard">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
