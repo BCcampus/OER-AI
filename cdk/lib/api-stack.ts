@@ -1385,6 +1385,7 @@ export class ApiGatewayStack extends cdk.Stack {
     const cfnLambda_practiceMaterial = lambdaPracticeMaterialFunction.node
       .defaultChild as lambda.CfnFunction;
     cfnLambda_practiceMaterial.overrideLogicalId("practiceMaterialFunction");
+    /*
 
     const csvBucket = new s3.Bucket(this, `${id}-csv-bucket`, {
       bucketName: `${id.toLowerCase()}-csv-ingestion-bucket`,
@@ -1462,5 +1463,6 @@ export class ApiGatewayStack extends cdk.Stack {
         filters: [{ suffix: ".csv" }],
       })
     );
+    */
   }
 }
