@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 
 // Validation schema
-const formSchema = z.object({
+const mcqSchema = z.object({
   materialType: z.literal("mcq"),
   topic: z.string().min(1, "Topic is required").max(200, "Topic too long"),
   numQuestions: z
@@ -33,6 +33,8 @@ const formSchema = z.object({
     .max(8, "Maximum 8 options"),
   difficulty: z.enum(["beginner", "intermediate", "advanced"]),
 });
+
+const formSchema = z.discriminatedUnion("materialType", [mcqSchema]);
 
 type FormData = z.infer<typeof formSchema>;
 
@@ -61,7 +63,9 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
   const materialType = watch("materialType");
 
   const onSubmit = (data: FormData) => {
-    onGenerate(data);
+    if (data.materialType === "mcq") {
+      onGenerate(data);
+    }
   };
 
   return (
