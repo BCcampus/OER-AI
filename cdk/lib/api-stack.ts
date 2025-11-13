@@ -20,10 +20,8 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as ecr from "aws-cdk-lib/aws-ecr";
-import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
-import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
@@ -1104,25 +1102,21 @@ export class ApiGatewayStack extends cdk.Stack {
     cfnLambda_textbook.overrideLogicalId("textbookFunction");
 
     // FAQ Lambda Function
-    const lambdaFaqFunction = new lambda.Function(
-      this,
-      `${id}-faqFunction`,
-      {
-        runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda"),
-        handler: "handlers/faqHandler.handler",
-        timeout: Duration.seconds(300),
-        vpc: vpcStack.vpc,
-        environment: {
-          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
-          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
-        },
-        functionName: `${id}-faqFunction`,
-        memorySize: 512,
-        layers: [postgres],
-        role: lambdaRole,
-      }
-    );
+    const lambdaFaqFunction = new lambda.Function(this, `${id}-faqFunction`, {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "handlers/faqHandler.handler",
+      timeout: Duration.seconds(300),
+      vpc: vpcStack.vpc,
+      environment: {
+        SM_DB_CREDENTIALS: db.secretPathUser.secretName,
+        RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
+      },
+      functionName: `${id}-faqFunction`,
+      memorySize: 512,
+      layers: [postgres],
+      role: lambdaRole,
+    });
 
     lambdaFaqFunction.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
@@ -1487,92 +1481,11 @@ export class ApiGatewayStack extends cdk.Stack {
         actions: ["bedrock:InvokeModel"],
         resources: [
           // Nova Pro inference profile (for text generation)
-          `arn:aws:bedrock:us-east-1:784303385514:inference-profile/us.amazon.nova-pro-v1:0`,
-          // Nova Pro foundation model
-          `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0`,
+          `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
           // Titan embeddings model (for retrieval)
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
         ],
       })
     );
-    /*
-
-    const csvBucket = new s3.Bucket(this, `${id}-csv-bucket`, {
-      bucketName: `${id.toLowerCase()}-csv-ingestion-bucket`,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      cors: [
-        {
-          allowedHeaders: ["*"],
-          allowedMethods: [
-            s3.HttpMethods.GET,
-            s3.HttpMethods.PUT,
-            s3.HttpMethods.HEAD,
-            s3.HttpMethods.POST,
-            s3.HttpMethods.DELETE,
-          ],
-          allowedOrigins: ["*"],
-        },
-      ],
-      // When deleting the stack, the bucket will be deleted as well
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      enforceSSL: true,
-    });
-
-    // Create SQS FIFO queue for rate-limited textbook processing
-    const textbookIngestionQueue = new sqs.Queue(
-      this,
-      `${id}-textbook-ingestion-queue`,
-      {
-        queueName: `${id}-textbook-ingestion-queue.fifo`,
-        fifo: true,
-        contentBasedDeduplication: true,
-        visibilityTimeout: Duration.minutes(15),
-        retentionPeriod: Duration.days(14),
-        deadLetterQueue: {
-          queue: new sqs.Queue(this, `${id}-textbook-ingestion-dlq`, {
-            queueName: `${id}-textbook-ingestion-dlq.fifo`,
-            fifo: true,
-            contentBasedDeduplication: true,
-            retentionPeriod: Duration.days(14),
-          }),
-          maxReceiveCount: 3,
-        },
-      }
-    );
-
-    // Create Lambda function to process CSV uploads
-    const csvProcessorFunction = new lambda.Function(
-      this,
-      `${id}-CsvProcessorFunction`,
-      {
-        runtime: lambda.Runtime.PYTHON_3_11,
-        code: lambda.Code.fromAsset("lambda/csvProcessor"),
-        handler: "index.handler",
-        timeout: Duration.minutes(10),
-        memorySize: 512,
-        functionName: `${id}-CsvProcessorFunction`,
-        environment: {
-          REGION: this.region,
-          QUEUE_URL: textbookIngestionQueue.queueUrl,
-        },
-        role: lambdaRole,
-      }
-    );
-
-    // Grant Lambda permissions to read from S3 bucket
-    csvBucket.grantRead(csvProcessorFunction);
-
-    // Grant Lambda permissions to send messages to SQS queue
-    textbookIngestionQueue.grantSendMessages(csvProcessorFunction);
-
-    // Add S3 event notification to trigger Lambda on CSV uploads
-    csvProcessorFunction.addEventSource(
-      new lambdaEventSources.S3EventSource(csvBucket, {
-        events: [s3.EventType.OBJECT_CREATED],
-        filters: [{ suffix: ".csv" }],
-      })
-    );
-    */
   }
 }
