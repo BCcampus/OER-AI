@@ -280,6 +280,9 @@ def handler(event, context):
         response = _llm.invoke(prompt)
         output_text = response.content
         logger.info(f"Received response from LLM, length: {len(output_text)}")
+        
+        # Always log the full raw output for debugging
+        logger.info(f"Raw LLM output (full): {output_text}")
 
         try:
             result = validate_shape(extract_json(output_text), num_questions, num_options)
@@ -291,12 +294,29 @@ def handler(event, context):
             response2 = _llm.invoke(retry_prompt)
             output_text2 = response2.content
             logger.info(f"Retry response length: {len(output_text2)}")
+            logger.info(f"Raw retry LLM output (full): {output_text2}")
             try:
                 result = validate_shape(extract_json(output_text2), num_questions, num_options)
             except Exception as e2:
                 logger.error(f"Retry also failed: {e2}")
                 logger.error(f"Raw retry output (first 2000 chars): {output_text2[:2000]}")
-                raise
+                # Return the raw LLM responses to client for debugging
+                return {
+                    "statusCode": 500,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Headers": "*",
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "*",
+                    },
+                    "body": json.dumps({
+                        "error": f"Failed to parse LLM response after retry: {str(e2)}",
+                        "firstAttemptError": str(e1),
+                        "rawFirstResponse": output_text,
+                        "rawRetryResponse": output_text2,
+                        "debug": "Check the raw responses above to see what the LLM generated"
+                    })
+                }
 
         return {
             "statusCode": 200,
