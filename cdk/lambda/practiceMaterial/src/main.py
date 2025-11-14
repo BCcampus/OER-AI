@@ -90,7 +90,7 @@ def initialize_constants():
     if _llm is None:
         model_kwargs = {
             "temperature": 0.6,
-            "max_tokens": 512,
+            "max_tokens": 2048,
             "top_p": 0.9,
         }
         logger.info(f"Creating ChatBedrock instance for model: {_practice_material_model_id}")
@@ -111,21 +111,59 @@ def clamp(value: int, lo: int, hi: int) -> int:
 def build_prompt(topic: str, difficulty: str, num_questions: int, num_options: int, context_snippets: list[str]) -> str:
     option_ids = [chr(97 + i) for i in range(num_options)]
     context = "\n".join([f"- {c}" for c in context_snippets])
+    
     return (
-        f"You are an assistant that generates practice MCQs in strict JSON. Output ONLY valid JSON.\n\n"
-        f"Context (from textbook):\n{context}\n\n"
-        f"Constraints:\n"
+        f"You are an assistant that generates practice multiple choice questions in strict JSON format.\n\n"
+        f"Context from textbook:\n{context}\n\n"
+        f"Your task:\n"
+        f"- Generate exactly {num_questions} multiple choice question(s)\n"
         f"- Topic: \"{topic}\"\n"
-        f"- Difficulty: \"{difficulty}\" (beginner|intermediate|advanced)\n"
-        f"- Produce exactly {num_questions} question(s) with exactly {num_options} option(s) each\n"
-        f"- Question IDs: q1..q{num_questions}\n"
-        f"- Allowed option IDs per question: {', '.join(option_ids)}\n\n"
+        f"- Difficulty: {difficulty}\n"
+        f"- Each question must have exactly {num_options} answer options\n"
+        f"- Use option IDs: {', '.join(option_ids)}\n"
+        f"- Question IDs must be: q1, q2, q3, etc.\n\n"
+        f"CRITICAL JSON SYNTAX RULES - FOLLOW EXACTLY:\n"
+        f"1. Output ONLY valid JSON - no markdown, no explanations, no preamble\n"
+        f"2. Use double quotes (\") for all strings, never single quotes\n"
+        f"3. COMMAS ARE REQUIRED between all array elements and object properties\n"
+        f"4. NEVER put a comma after the LAST item in an array or object\n"
+        f'5. Escape quotes inside strings: use \\" for a literal quote character\n'
+        f"6. Keep all text on single lines - no line breaks inside string values\n"
+        f"7. Ensure all brackets and braces are properly closed\n"
+        f"8. Pay special attention: comma BEFORE closing bracket/brace = ERROR\n\n"
+        f"CORRECT comma placement examples:\n"
+        f'- Between items: [{{"id": "a"}}, {{"id": "b"}}]  <- comma BETWEEN items\n'
+        f'- Last item has NO comma: [{{"id": "a"}}, {{"id": "b"}}]  <- no comma before ]\n'
+        f'- Object properties: {{"key1": "val1", "key2": "val2"}}  <- comma between, not after last\n\n'
+        f"Required JSON structure:\n"
+        f"{{\n"
+        f'  "title": "Practice Quiz: {topic}",\n'
+        f'  "questions": [\n'
+        f"    {{\n"
+        f'      "id": "q1",\n'
+        f'      "questionText": "Write your question here",\n'
+        f'      "options": [\n'
+        f'        {{"id": "a", "text": "First option text", "explanation": "Explanation for this option"}},\n'
+        f'        {{"id": "b", "text": "Second option text", "explanation": "Explanation for this option"}}\n'
+        f"      ],\n"
+        f'      "correctAnswer": "a"\n'
+        f"    }}\n"
+        f"  ]\n"
+        f"}}\n\n"
         f"Content requirements:\n"
-        f"- Write real, specific questions based on the context; no placeholders or template phrases.\n"
-        f"- Exactly one correct answer per question; include explanations for all options.\n\n"
-        f"JSON structure (keys and types only):\n"
-        f"{{\n  \"title\": \"Practice Quiz: {topic}\",\n  \"questions\": [{{\n    \"id\": \"q1\",\n    \"questionText\": string,\n    \"options\": [{{\"id\": \"a\", \"text\": string, \"explanation\": string}}],\n    \"correctAnswer\": \"a\"\n  }}]\n}}\n\n"
-        f"Return JSON only, no extra text."
+        f"- Write specific, detailed questions based on the context provided\n"
+        f"- All options must be plausible and relevant to the question\n"
+        f"- Provide clear explanations for each option (why it's correct or incorrect)\n"
+        f"- Exactly ONE option per question should be correct\n"
+        f"- Make questions clear and unambiguous\n\n"
+        f"Common mistakes to avoid:\n"
+        f"- WRONG: Trailing comma before closing bracket: [item1, item2,]\n"
+        f"- WRONG: Missing comma between items: [item1 item2]\n"
+        f"- WRONG: Comma after last property: {{\"key\": \"value\",}}\n"
+        f"- WRONG: Unescaped quotes in strings\n"
+        f"- WRONG: Extra text before or after the JSON\n"
+        f"- WRONG: Incomplete JSON - must complete all {num_questions} questions\n\n"
+        f"Output the complete, valid JSON now:"
     )
 
 
