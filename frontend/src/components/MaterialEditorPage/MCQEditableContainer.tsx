@@ -3,25 +3,27 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { MCQEditable } from "./MCQEditable";
+import { ExportDialog } from "./ExportDialog";
 import type { IH5PMinimalQuestionSet, IH5PQuestion } from "@/types/MaterialEditor";
 import { ChevronDown, ChevronUp, Download, Plus, Trash2 } from "lucide-react";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 interface MCQEditableContainerProps {
   initialQuestionSet: IH5PMinimalQuestionSet;
-  exportToH5P: (questionSet: IH5PMinimalQuestionSet) => void;
   onDelete: () => void;
+  textbookId?: string;
 }
 
 export function MCQEditableContainer({
   initialQuestionSet,
-  exportToH5P: onExport,
   onDelete,
+  textbookId,
 }: MCQEditableContainerProps) {
   const [questionSet, setQuestionSet] = useState<IH5PMinimalQuestionSet>(initialQuestionSet);
   const [isExpanded, setIsExpanded] = useState(true);
   const [title, setTitle] = useState("Untitled Quiz");
   const [exportFormat, setExportFormat] = useState<string>("json");
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   const handleQuestionUpdate = (index: number, updatedQuestion: IH5PQuestion) => {
     const newQuestions = [...questionSet.questions];
@@ -81,6 +83,65 @@ export function MCQEditableContainer({
     const contents = JSON.stringify(qs, null, 2);
     downloadFile(contents, `${title || "quiz"}.json`, "application/json");
   };
+
+  const exportAsH5P = async () => {
+    try {
+      // Validate textbook ID
+      if (!textbookId) {
+        alert("Please select a textbook before exporting H5P");
+        return;
+      }
+
+      // Get auth token
+      const tokenResp = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
+      if (!tokenResp.ok) throw new Error("Failed to get public token");
+      const { token } = await tokenResp.json();
+
+      // Send questions in H5P format (Lambda expects this structure)
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbookId}/practice_materials/export-h5p`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: title || "Quiz",
+            questions: questionSet.questions, // Send in original H5P format
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to export H5P package");
+      }
+
+      const data = await response.json();
+      
+      // Decode base64 and download
+      const binaryString = atob(data.content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const blob = new Blob([bytes], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error("Error exporting H5P:", error);
+      alert(`Failed to export H5P: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  };
   
 
   const handleExport = () => {
@@ -90,8 +151,14 @@ export function MCQEditableContainer({
     }
 
     if (exportFormat === "h5p") {
-      // use parents h5p api exporter
-      onExport(questionSet);
+      exportAsH5P();
+      return;
+    }
+
+    if (exportFormat === "pdf") {
+      // Open dialog to choose PDF style
+      setShowExportDialog(true);
+      return;
     }
   };
 
@@ -170,6 +237,7 @@ export function MCQEditableContainer({
                 <SelectContent>
                   <SelectItem className="cursor-pointer" value="json">JSON</SelectItem>
                   <SelectItem className="cursor-pointer" value="h5p">H5P</SelectItem>
+                  <SelectItem className="cursor-pointer" value="pdf">PDF</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -184,6 +252,13 @@ export function MCQEditableContainer({
           </CardFooter>
         </>
       )} 
+      
+      <ExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        questionSet={questionSet}
+        title={title}
+      />
     </Card>
   );
 }
