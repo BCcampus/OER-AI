@@ -285,11 +285,18 @@ def handler(event, context):
             result = validate_shape(extract_json(output_text), num_questions, num_options)
         except Exception as e1:
             logger.warning(f"First parse/validation failed: {e1}")
+            logger.warning(f"Raw LLM output (first 2000 chars): {output_text[:2000]}")
             retry_prompt = prompt + "\n\nIMPORTANT: Your previous response was invalid. You MUST return valid JSON only, exactly matching the schema and lengths. No extra commentary."
             logger.info("Retrying with enhanced prompt")
             response2 = _llm.invoke(retry_prompt)
             output_text2 = response2.content
-            result = validate_shape(extract_json(output_text2), num_questions, num_options)
+            logger.info(f"Retry response length: {len(output_text2)}")
+            try:
+                result = validate_shape(extract_json(output_text2), num_questions, num_options)
+            except Exception as e2:
+                logger.error(f"Retry also failed: {e2}")
+                logger.error(f"Raw retry output (first 2000 chars): {output_text2[:2000]}")
+                raise
 
         return {
             "statusCode": 200,
