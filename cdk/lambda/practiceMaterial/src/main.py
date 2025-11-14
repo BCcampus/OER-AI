@@ -5,7 +5,7 @@ import boto3
 from typing import Any, Dict
 
 from helpers.vectorstore import get_textbook_retriever
-from langchain_aws import BedrockEmbeddings
+from langchain_aws import BedrockEmbeddings, ChatBedrock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ _embedding_model_id: str | None = None
 _bedrock_region: str | None = None
 _embeddings = None
 _bedrock_runtime = None
+_llm = None
 
 
 def get_secret_dict(name: str) -> Dict[str, Any]:
@@ -54,7 +55,7 @@ def get_parameter(param_name: str | None, cached_var: str | None) -> str | None:
 
 def initialize_constants():
     """Initialize model IDs and region from SSM parameters"""
-    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _bedrock_runtime
+    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _bedrock_runtime, _llm
     
     # Get practice material model ID from SSM
     _practice_material_model_id = get_parameter(PRACTICE_MATERIAL_MODEL_PARAM, _practice_material_model_id)
@@ -84,6 +85,23 @@ def initialize_constants():
             client=boto3.client("bedrock-runtime", region_name=REGION),  # Separate client for embeddings in deployment region
             region_name=REGION,  # Use deployment region for embeddings, not _bedrock_region
         )
+    
+    # Initialize LLM using ChatBedrock (matching textGeneration pattern)
+    if _llm is None:
+        model_kwargs = {
+            "temperature": 0.6,
+            "max_tokens": 512,
+            "top_p": 0.9,
+        }
+        logger.info(f"Creating ChatBedrock instance for model: {_practice_material_model_id}")
+        logger.info(f"Model parameters: {json.dumps(model_kwargs)}")
+        
+        _llm = ChatBedrock(
+            model_id=_practice_material_model_id,
+            model_kwargs=model_kwargs,
+            client=_bedrock_runtime
+        )
+        logger.info("ChatBedrock LLM initialized successfully")
 
 
 def clamp(value: int, lo: int, hi: int) -> int:
@@ -219,47 +237,20 @@ def handler(event, context):
 
         prompt = build_prompt(topic, difficulty, num_questions, num_options, snippets)
 
-        payload = {
-            "inputText": prompt,
-            "textGenerationConfig": {
-                "temperature": 0.6,
-                "maxTokenCount": 512,
-                "topP": 0.9,
-            },
-        }
-        resp = _bedrock_runtime.invoke_model(
-            modelId=_practice_material_model_id,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(payload),
-        )
-        model_bytes = resp["body"].read()
-        text = model_bytes.decode("utf-8")
-        try:
-            parsed_outer = json.loads(text)
-            output_text = parsed_outer.get("results", [{}])[0].get("outputText") or parsed_outer.get("outputText") or parsed_outer.get("generation") or text
-        except Exception:
-            output_text = text
+        # Use ChatBedrock LLM (matching textGeneration pattern)
+        logger.info("Invoking LLM for practice material generation")
+        response = _llm.invoke(prompt)
+        output_text = response.content
+        logger.info(f"Received response from LLM, length: {len(output_text)}")
 
         try:
             result = validate_shape(extract_json(output_text), num_questions, num_options)
         except Exception as e1:
             logger.warning(f"First parse/validation failed: {e1}")
             retry_prompt = prompt + "\n\nIMPORTANT: Your previous response was invalid. You MUST return valid JSON only, exactly matching the schema and lengths. No extra commentary."
-            payload["inputText"] = retry_prompt
-            resp2 = _bedrock_runtime.invoke_model(
-                modelId=_practice_material_model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps(payload),
-            )
-            model_bytes2 = resp2["body"].read()
-            text2 = model_bytes2.decode("utf-8")
-            try:
-                parsed_outer2 = json.loads(text2)
-                output_text2 = parsed_outer2.get("results", [{}])[0].get("outputText") or parsed_outer2.get("outputText") or parsed_outer2.get("generation") or text2
-            except Exception:
-                output_text2 = text2
+            logger.info("Retrying with enhanced prompt")
+            response2 = _llm.invoke(retry_prompt)
+            output_text2 = response2.content
             result = validate_shape(extract_json(output_text2), num_questions, num_options)
 
         return {
