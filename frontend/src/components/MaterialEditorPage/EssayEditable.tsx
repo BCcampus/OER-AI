@@ -2,12 +2,26 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { I5HPEssayQuestion, IH5PEssayKeyword } from "@/types/MaterialEditor";
+import type {
+  I5HPEssayQuestion,
+  IH5PEssayKeyword,
+} from "@/types/MaterialEditor";
 import { Separator } from "../ui/separator";
 import { Label } from "../ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Trash2, Info } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface EssayEditableProps {
   question: I5HPEssayQuestion;
@@ -16,13 +30,33 @@ interface EssayEditableProps {
   onDelete?: () => void;
 }
 
+// Helper component for info popovers
+const InfoPopover = ({ content }: { content: string }) => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-4 w-4 p-0 hover:bg-transparent"
+      >
+        <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-help" />
+      </Button>
+    </PopoverTrigger>
+    <PopoverContent className="text-xs max-w-xs" side="top">
+      {content}
+    </PopoverContent>
+  </Popover>
+);
+
 export function EssayEditable({
   question,
   questionNumber,
   onUpdate,
   onDelete,
 }: EssayEditableProps) {
-  const [expandedKeywords, setExpandedKeywords] = useState<Set<number>>(new Set());
+  const [expandedKeywords, setExpandedKeywords] = useState<Set<number>>(
+    new Set()
+  );
 
   const handleTaskDescriptionChange = (newText: string) => {
     onUpdate({
@@ -34,7 +68,11 @@ export function EssayEditable({
     });
   };
 
-  const handleKeywordChange = (index: number, field: keyof IH5PEssayKeyword, value: string | string[]) => {
+  const handleKeywordChange = (
+    index: number,
+    field: keyof IH5PEssayKeyword,
+    value: string | string[]
+  ) => {
     const newKeywords = [...question.params.keywords];
     newKeywords[index] = {
       ...newKeywords[index],
@@ -129,7 +167,11 @@ export function EssayEditable({
     });
   };
 
-  const handleAlternativeChange = (keywordIndex: number, altIndex: number, value: string) => {
+  const handleAlternativeChange = (
+    keywordIndex: number,
+    altIndex: number,
+    value: string
+  ) => {
     const newKeywords = [...question.params.keywords];
     const alternatives = [...(newKeywords[keywordIndex].alternatives || [])];
     alternatives[altIndex] = value;
@@ -193,7 +235,9 @@ export function EssayEditable({
             </Button>
           )}
         </div>
-        <Label className="text-sm font-normal text-muted-foreground">Task Description</Label>
+        <Label className="text-sm font-normal text-muted-foreground">
+          Task Description
+        </Label>
         <Textarea
           value={question.params.taskDescription}
           onChange={(e) => handleTaskDescriptionChange(e.target.value)}
@@ -215,9 +259,7 @@ export function EssayEditable({
         {question.params.keywords.map((keyword, index) => (
           <div key={index} className="mb-4">
             <div className="flex items-center justify-between w-full mb-2">
-              <Label className="text-sm font-medium">
-                Keyword {index + 1}
-              </Label>
+              <Label className="text-sm font-medium">Keyword {index + 1}</Label>
               <Button
                 variant="link"
                 size="icon"
@@ -231,16 +273,21 @@ export function EssayEditable({
 
             <Input
               value={keyword.keyword}
-              onChange={(e) => handleKeywordChange(index, "keyword", e.target.value)}
+              onChange={(e) =>
+                handleKeywordChange(index, "keyword", e.target.value)
+              }
               placeholder="Keyword text"
               className="text-sm mb-2"
             />
 
             {/* Alternatives */}
             <div className="pl-4 border-l-2 border-muted space-y-2 mb-2">
-              <Label className="text-xs font-normal text-muted-foreground">
-                Alternatives (optional)
-              </Label>
+              <div className="flex items-center gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">
+                  Alternatives (optional)
+                </Label>
+                <InfoPopover content="Add alternative words or phrases that should also be accepted as matches for this keyword (e.g., 'photosynthesis' and 'photo-synthesis')." />
+              </div>
               {keyword.alternatives?.map((alt, altIndex) => (
                 <div key={altIndex} className="flex gap-2">
                   <Input
@@ -286,14 +333,21 @@ export function EssayEditable({
               <div className="pl-4 border-l-2 border-muted space-y-3 mt-2">
                 {/* Points */}
                 <div>
-                  <Label className="text-xs font-normal text-muted-foreground">
-                    Points
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Points
+                    </Label>
+                    <InfoPopover content="Number of points awarded when this keyword is found in the student's answer." />
+                  </div>
                   <Input
                     type="number"
                     value={keyword.options.points}
                     onChange={(e) =>
-                      handleKeywordOptionChange(index, "points", parseInt(e.target.value) || 0)
+                      handleKeywordOptionChange(
+                        index,
+                        "points",
+                        parseInt(e.target.value) || 0
+                      )
                     }
                     className="text-xs mt-1"
                     min="0"
@@ -302,14 +356,21 @@ export function EssayEditable({
 
                 {/* Occurrences */}
                 <div>
-                  <Label className="text-xs font-normal text-muted-foreground">
-                    Required Occurrences
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Required Occurrences
+                    </Label>
+                    <InfoPopover content="Minimum number of times this keyword must appear in the answer to receive full points." />
+                  </div>
                   <Input
                     type="number"
                     value={keyword.options.occurrences}
                     onChange={(e) =>
-                      handleKeywordOptionChange(index, "occurrences", parseInt(e.target.value) || 1)
+                      handleKeywordOptionChange(
+                        index,
+                        "occurrences",
+                        parseInt(e.target.value) || 1
+                      )
                     }
                     className="text-xs mt-1"
                     min="1"
@@ -323,7 +384,11 @@ export function EssayEditable({
                     id={`case-sensitive-${index}`}
                     checked={keyword.options.caseSensitive}
                     onChange={(e) =>
-                      handleKeywordOptionChange(index, "caseSensitive", e.target.checked)
+                      handleKeywordOptionChange(
+                        index,
+                        "caseSensitive",
+                        e.target.checked
+                      )
                     }
                     className="h-4 w-4 cursor-pointer"
                   />
@@ -342,7 +407,11 @@ export function EssayEditable({
                     id={`forgive-mistakes-${index}`}
                     checked={keyword.options.forgiveMistakes}
                     onChange={(e) =>
-                      handleKeywordOptionChange(index, "forgiveMistakes", e.target.checked)
+                      handleKeywordOptionChange(
+                        index,
+                        "forgiveMistakes",
+                        e.target.checked
+                      )
                     }
                     className="h-4 w-4 cursor-pointer"
                   />
@@ -356,13 +425,20 @@ export function EssayEditable({
 
                 {/* Feedback Included */}
                 <div>
-                  <Label className="text-xs font-normal text-muted-foreground">
-                    Feedback When Included
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Feedback When Included
+                    </Label>
+                    <InfoPopover content="Message shown to students when this keyword is successfully found in their answer." />
+                  </div>
                   <Input
                     value={keyword.options.feedbackIncluded || ""}
                     onChange={(e) =>
-                      handleKeywordOptionChange(index, "feedbackIncluded", e.target.value)
+                      handleKeywordOptionChange(
+                        index,
+                        "feedbackIncluded",
+                        e.target.value
+                      )
                     }
                     placeholder="Feedback when keyword is found"
                     className="text-xs mt-1"
@@ -371,13 +447,20 @@ export function EssayEditable({
 
                 {/* Feedback Included Word */}
                 <div>
-                  <Label className="text-xs font-normal text-muted-foreground">
-                    Feedback Included Word Type
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Feedback Included Word Type
+                    </Label>
+                    <InfoPopover content="Determines what word is shown in the feedback. 'Keyword' shows the exact keyword, 'Alternative' shows the matched alternative, 'Answer' shows the student's answer, 'None' shows no word." />
+                  </div>
                   <Select
                     value={keyword.options.feedbackIncludedWord}
                     onValueChange={(value) =>
-                      handleKeywordOptionChange(index, "feedbackIncludedWord", value)
+                      handleKeywordOptionChange(
+                        index,
+                        "feedbackIncludedWord",
+                        value
+                      )
                     }
                   >
                     <SelectTrigger className="border-text-muted-foreground text-xs mt-1">
@@ -394,13 +477,20 @@ export function EssayEditable({
 
                 {/* Feedback Missed */}
                 <div>
-                  <Label className="text-xs font-normal text-muted-foreground">
-                    Feedback When Missed
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Feedback When Missed
+                    </Label>
+                    <InfoPopover content="Message shown to students when this keyword is missing from their answer." />
+                  </div>
                   <Input
                     value={keyword.options.feedbackMissed || ""}
                     onChange={(e) =>
-                      handleKeywordOptionChange(index, "feedbackMissed", e.target.value)
+                      handleKeywordOptionChange(
+                        index,
+                        "feedbackMissed",
+                        e.target.value
+                      )
                     }
                     placeholder="Feedback when keyword is missing"
                     className="text-xs mt-1"
@@ -409,13 +499,20 @@ export function EssayEditable({
 
                 {/* Feedback Missed Word */}
                 <div>
-                  <Label className="text-xs font-normal text-muted-foreground">
-                    Feedback Missed Word Type
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs font-normal text-muted-foreground">
+                      Feedback Missed Word Type
+                    </Label>
+                    <InfoPopover content="Determines what word is shown in the feedback for missed keywords. 'Keyword' shows the expected keyword, 'None' shows no word." />
+                  </div>
                   <Select
                     value={keyword.options.feedbackMissedWord}
                     onValueChange={(value) =>
-                      handleKeywordOptionChange(index, "feedbackMissedWord", value)
+                      handleKeywordOptionChange(
+                        index,
+                        "feedbackMissedWord",
+                        value
+                      )
                     }
                   >
                     <SelectTrigger className="border-text-muted-foreground text-xs mt-1">
