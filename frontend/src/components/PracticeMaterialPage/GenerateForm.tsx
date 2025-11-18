@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -55,10 +56,11 @@ interface GenerateFormProps {
 }
 
 export function GenerateForm({ onGenerate }: GenerateFormProps) {
+  const [currentMaterialType, setCurrentMaterialType] = useState<"mcq" | "flashcards">("mcq");
+
   const {
     control,
     handleSubmit,
-    watch,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
@@ -72,31 +74,40 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
     } as FormData,
   });
 
-  // watch current material type
-  const materialType = watch("materialType");
-
   const onSubmit = (data: FormData) => {
+    console.log("Form submitted with materialType:", data.materialType);
+    console.log("Current state materialType:", currentMaterialType);
     onGenerate(data);
   };
 
   // Handle material type change
   const handleMaterialTypeChange = (value: "mcq" | "flashcards") => {
+    console.log("=== Material Type Change ===");
+    console.log("New value:", value);
+    console.log("Value type:", typeof value);
+    console.log("Value === 'mcq':", value === "mcq");
+    console.log("Value === 'flashcards':", value === "flashcards");
+    
+    setCurrentMaterialType(value);
+    
     if (value === "flashcards") {
+      console.log("Resetting to flashcard defaults");
       reset({
-        materialType: "flashcards",
+        materialType: value,
         topic: "",
         numCards: 10,
         difficulty: "intermediate",
         cardType: "definition",
-      });
+      } as FormData);
     } else {
+      console.log("Resetting to MCQ defaults");
       reset({
-        materialType: "mcq",
+        materialType: value,
         topic: "",
         numQuestions: 5,
         numOptions: 4,
         difficulty: "intermediate",
-      });
+      } as FormData);
     }
   };
 
@@ -126,9 +137,11 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
               control={control}
               render={({ field }) => (
                 <Select 
-                  value={field.value} 
+                  value={currentMaterialType}
                   onValueChange={(value) => {
-                    handleMaterialTypeChange(value as "mcq" | "flashcards");
+                    const newType = value as "mcq" | "flashcards";
+                    field.onChange(newType);
+                    handleMaterialTypeChange(newType);
                   }}
                 >
                   <SelectTrigger
@@ -171,7 +184,7 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
           </div>
 
           {/* Conditional Fields based on Material Type */}
-          {materialType === "mcq" && (
+          {currentMaterialType === "mcq" && (
             <>
               {/* Number of Questions */}
               <div className="space-y-2">
@@ -188,11 +201,11 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
                       onChange={(e) =>
                         field.onChange(parseInt(e.target.value) || 0)
                       }
-                      className={(materialType === "mcq" && "numQuestions" in errors && errors.numQuestions) ? "border-red-500" : ""}
+                      className={(currentMaterialType === "mcq" && "numQuestions" in errors && errors.numQuestions) ? "border-red-500" : ""}
                     />
                   )}
                 />
-                {materialType === "mcq" && "numQuestions" in errors && errors.numQuestions && (
+                {currentMaterialType === "mcq" && "numQuestions" in errors && errors.numQuestions && (
                   <p className="text-sm text-red-500">
                     {errors.numQuestions.message}
                   </p>
@@ -214,11 +227,11 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
                       onChange={(e) =>
                         field.onChange(parseInt(e.target.value) || 0)
                       }
-                      className={(materialType === "mcq" && "numOptions" in errors && errors.numOptions) ? "border-red-500" : ""}
+                      className={(currentMaterialType === "mcq" && "numOptions" in errors && errors.numOptions) ? "border-red-500" : ""}
                     />
                   )}
                 />
-                {materialType === "mcq" && "numOptions" in errors && errors.numOptions && (
+                {currentMaterialType === "mcq" && "numOptions" in errors && errors.numOptions && (
                   <p className="text-sm text-red-500">
                     {errors.numOptions.message}
                   </p>
@@ -254,7 +267,7 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
           )}
 
           {/* Flashcard-specific Fields */}
-          {materialType === "flashcards" && (
+          {currentMaterialType === "flashcards" && (
             <>
               {/* Number of Cards */}
               <div className="space-y-2">
@@ -271,11 +284,11 @@ export function GenerateForm({ onGenerate }: GenerateFormProps) {
                       onChange={(e) =>
                         field.onChange(parseInt(e.target.value) || 0)
                       }
-                      className={(materialType === "flashcards" && "numCards" in errors && errors.numCards) ? "border-red-500" : ""}
+                      className={(currentMaterialType === "flashcards" && "numCards" in errors && errors.numCards) ? "border-red-500" : ""}
                     />
                   )}
                 />
-                {materialType === "flashcards" && "numCards" in errors && errors.numCards && (
+                {currentMaterialType === "flashcards" && "numCards" in errors && errors.numCards && (
                   <p className="text-sm text-red-500">
                     {errors.numCards.message}
                   </p>

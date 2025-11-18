@@ -82,6 +82,7 @@ export default function PracticeMaterialPage() {
 
   const handleGenerate = async (formData: any) => {
     console.log("handleGenerate called with:", formData);
+    console.log("Material type being processed:", formData.materialType);
     setErrorMsg(null);
     if (!textbook?.id) {
       setErrorMsg("Please select a textbook before generating practice materials.");
@@ -102,14 +103,18 @@ export default function PracticeMaterialPage() {
       };
 
       if (formData.materialType === "flashcards") {
+        console.log("Building flashcard request body");
         requestBody.material_type = "flashcard";
         requestBody.num_cards = formData.numCards;
         requestBody.card_type = formData.cardType;
       } else {
+        console.log("Building MCQ request body");
         requestBody.material_type = "mcq";
         requestBody.num_questions = formData.numQuestions;
         requestBody.num_options = formData.numOptions;
       }
+
+      console.log("Final request body:", requestBody);
 
       const resp = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/practice_materials`,
