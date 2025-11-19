@@ -4054,7 +4054,7 @@ paths:
                             rubric:
                               type: string
                             expectedLength:
-                              type: string
+                              type: integer
                       metadata:
                         type: object
                         properties:
