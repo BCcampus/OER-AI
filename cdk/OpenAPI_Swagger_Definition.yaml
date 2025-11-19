@@ -3841,6 +3841,7 @@ paths:
         - User
       summary: Generate AI practice materials (MCQs or Flashcards) for a textbook
       operationId: generate_practice_materials
+      #TODO: figure out why this breaks the API Gateway deployment
       # security:
       #   - userAuthorizer: []
       parameters:
