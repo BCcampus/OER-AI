@@ -72,7 +72,7 @@ export default function PracticeMaterialPage() {
       }
 
       const data: PracticeMaterial = await resp.json();
-      setMaterials((prev) => [...prev, data]);
+      setMaterials((prev) => [data, ...prev]);
     } catch (e) {
       const err = e as Error;
       console.error("Error generating practice material:", err);
