@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Trash2, BookOpen, Check, X, Loader2 } from "lucide-react";
+import { Trash2, BookOpen, Check, X, Loader2, ExternalLink } from "lucide-react";
 import type { ShortAnswerQuestion } from "@/types/PracticeMaterial";
 import { useTextbookView } from "@/providers/textbookView";
 
@@ -20,6 +20,57 @@ interface GradingFeedback {
   keyPointsCovered: string[];
   keyPointsMissed: string[];
 }
+
+// Format source to show clickable links for URLs
+const formatSource = (source: string) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const pageRegex = /\(p\.\s*(\d+)\)/i;
+
+  // Check if source contains a URL
+  const urlMatch = source.match(urlRegex);
+
+  if (urlMatch && urlMatch.length > 0) {
+    // Extract URL
+    const url = urlMatch[0];
+    // Extract the remaining text (title, page info)
+    const textParts = source.split(urlRegex);
+    const beforeUrl = textParts[0]?.trim() || "";
+    const afterUrl = textParts[2]?.trim() || "";
+
+    // Check for page number
+    const pageMatch = afterUrl.match(pageRegex);
+    const pageNumber = pageMatch ? pageMatch[1] : null;
+
+    return (
+      <span className="flex items-center gap-1.5 flex-wrap text-foreground/80">
+        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline break-all"
+        >
+          {beforeUrl || url}
+        </a>
+        {pageNumber && <span className="text-muted-foreground">(p. {pageNumber})</span>}
+      </span>
+    );
+  } else {
+    // Not a URL, treat as textbook reference
+    const pageMatch = source.match(pageRegex);
+    const pageNumber = pageMatch ? pageMatch[1] : null;
+
+    return (
+      <span className="flex items-center gap-1.5 flex-wrap text-foreground/80">
+        <BookOpen className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+        <span className="break-words">
+          {source.replace(pageRegex, "").trim()}
+          {pageNumber && <span className="ml-1 text-muted-foreground">(p. {pageNumber})</span>}
+        </span>
+      </span>
+    );
+  }
+};
 
 export function ShortAnswer({ title, questions, sources_used, onDelete }: ShortAnswerProps) {
   const { textbook } = useTextbookView();
@@ -241,6 +292,23 @@ export function ShortAnswer({ title, questions, sources_used, onDelete }: ShortA
                 </div>
               )}
 
+              {/* Show sources for learning */}
+              {sources_used && sources_used.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 rounded-lg">
+                  <p className="font-medium text-amber-900 dark:text-amber-100 mb-2">Learn more from these sources:</p>
+                  <ul className="space-y-2 list-none pl-0">
+                    {sources_used.map((source, index) => (
+                      <li
+                        key={index}
+                        className="text-xs"
+                      >
+                        {formatSource(source)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Key Points Analysis */}
               <div className="bg-secondary/50 p-4 rounded-lg space-y-3">
                 {currentFeedback.keyPointsCovered.length > 0 && (
@@ -333,21 +401,6 @@ export function ShortAnswer({ title, questions, sources_used, onDelete }: ShortA
             <p className="text-sm text-muted-foreground mt-1">
               Review your answers or reset to try again.
             </p>
-          </div>
-        )}
-
-        {/* Sources Section */}
-        {sources_used && sources_used.length > 0 && (
-          <div className="pt-4 border-t">
-            <h3 className="text-sm font-semibold mb-2">Content Sources</h3>
-            <ul className="text-xs text-muted-foreground space-y-1">
-              {sources_used.map((source, idx) => (
-                <li key={idx} className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>{source}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         )}
       </CardContent>

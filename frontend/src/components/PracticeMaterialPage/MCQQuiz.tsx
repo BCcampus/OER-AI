@@ -135,6 +135,7 @@ export function MCQQuiz({ title, questions, sources_used, onDelete }: MCQQuizPro
                 question={question}
                 questionNumber={index + 1}
                 answer={answer}
+                sources_used={sources_used}
                 onAnswerChange={handleAnswerChange}
                 onSubmit={handleSubmit}
                 onReset={handleReset}
@@ -162,21 +163,6 @@ export function MCQQuiz({ title, questions, sources_used, onDelete }: MCQQuizPro
               </Button>
             )}
           </div>
-
-          {/* Sources Section */}
-          {sources_used && sources_used.length > 0 && (
-            <div className="mt-6 pt-6 border-t">
-              <h3 className="text-sm font-semibold mb-2">Content Sources</h3>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                {sources_used.map((source, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="text-primary mt-0.5">•</span>
-                    <span>{source}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </CardContent>
       )}
     </Card>

@@ -15,11 +15,10 @@ import { ChevronLeft, ChevronRight, Download, Shuffle, Trash2, RotateCcw } from 
 interface FlashcardSetProps {
   title: string;
   cards: FlashcardSetData["cards"];
-  sources_used?: string[];
   onDelete: () => void;
 }
 
-export function FlashcardSet({ title, cards, sources_used, onDelete }: FlashcardSetProps) {
+export function FlashcardSet({ title, cards, onDelete }: FlashcardSetProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [shuffledCards, setShuffledCards] = useState(cards);
   const [exportFormat, setExportFormat] = useState<string>("json");
@@ -146,21 +145,6 @@ export function FlashcardSet({ title, cards, sources_used, onDelete }: Flashcard
             </Button>
           </div>
         </div>
-
-        {/* Sources Section */}
-        {sources_used && sources_used.length > 0 && (
-          <div className="pt-4 border-t">
-            <h3 className="text-sm font-semibold mb-2">Content Sources</h3>
-            <ul className="text-xs text-muted-foreground space-y-1">
-              {sources_used.map((source, idx) => (
-                <li key={idx} className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>{source}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

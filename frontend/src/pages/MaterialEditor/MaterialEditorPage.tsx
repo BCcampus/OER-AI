@@ -37,7 +37,7 @@ const dummyMCQQuestions: I5HPMultiChoiceQuestion[] = [
           correct: false,
           tipsAndFeedback: {
             tip: "The derivative changes the function",
-            chosenFeedback: "Incorrect. This is the original function, not its derivative",
+            chosenFeedback: "Not quite. This is the original function, not its derivative",
             notChosenFeedback: "",
           },
         },
@@ -72,7 +72,7 @@ const dummyMCQQuestions: I5HPMultiChoiceQuestion[] = [
           correct: false,
           tipsAndFeedback: {
             tip: "Check your calculation",
-            chosenFeedback: "Incorrect. This would be the integral of 4x",
+            chosenFeedback: "Not quite. This would be the integral of 4x",
             notChosenFeedback: "",
           },
         },
