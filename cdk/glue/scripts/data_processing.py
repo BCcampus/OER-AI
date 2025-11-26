@@ -1299,8 +1299,8 @@ def main():
             """
             
             # Parse authors from metadata
-            authors_str = combined_metadata.get('Author', '')
-            authors = [a.strip() for a in authors_str.split(",")] if authors_str else []
+            authors_str = combined_metadata.get('Authors', '')
+            authors = [a.strip() for a in re.split(r'[,;]|\band\b', s, flags=re.IGNORECASE) if a.strip()] if s else []
             
             # Parse publication date
             pub_date_str = combined_metadata.get('Publication Date', '')
