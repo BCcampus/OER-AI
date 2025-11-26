@@ -10,6 +10,9 @@ import {
   ArrowLeft,
   BookOpen,
   Users,
+  HelpCircle,
+  Share2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   LineChart,
@@ -53,6 +56,27 @@ type TimeSeriesData = {
 
 type TextbookAnalyticsData = {
   timeSeries: TimeSeriesData[];
+};
+
+type FAQ = {
+  id: string;
+  question_text: string;
+  answer_text: string;
+  usage_count: number;
+  last_used_at: string;
+  cached_at: string;
+};
+
+type SharedPrompt = {
+  id: string;
+  title: string;
+  prompt_text: string;
+  visibility: string;
+  tags: string[];
+  role: string;
+  reported: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 function ChartCard({
@@ -111,6 +135,8 @@ export default function TextbookDetailsPage() {
   const [analyticsData, setAnalyticsData] = useState<TextbookAnalyticsData>({
     timeSeries: [],
   });
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [sharedPrompts, setSharedPrompts] = useState<SharedPrompt[]>([]);
   const [timeRange, setTimeRange] = useState("3m");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +147,13 @@ export default function TextbookDetailsPage() {
       fetchAnalytics();
     }
   }, [id, timeRange]);
+
+  useEffect(() => {
+    if (id && activeView === "faq") {
+      fetchFAQs();
+      fetchSharedPrompts();
+    }
+  }, [id, activeView]);
 
   const fetchTextbookDetails = async () => {
     try {
@@ -172,13 +205,65 @@ export default function TextbookDetailsPage() {
       }
 
       const data = await response.json();
-      console.log(data);
       setAnalyticsData(data);
     } catch (err) {
       console.error("Error fetching analytics:", err);
-      // Don't set main error here to allow textbook details to show even if analytics fail
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFAQs = async () => {
+    try {
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/textbooks/${id}/faqs`,
+        {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch FAQs");
+      }
+
+      const data = await response.json();
+      setFaqs(data.faqs || []);
+    } catch (err) {
+      console.error("Error fetching FAQs:", err);
+    }
+  };
+
+  const fetchSharedPrompts = async () => {
+    try {
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_ENDPOINT
+        }/admin/textbooks/${id}/shared_prompts`,
+        {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch shared prompts");
+      }
+
+      const data = await response.json();
+      setSharedPrompts(data.prompts || []);
+    } catch (err) {
+      console.error("Error fetching shared prompts:", err);
     }
   };
 
@@ -319,7 +404,7 @@ export default function TextbookDetailsPage() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-gray-50">
-          <div className="max-w-5xl mx-auto animate-in fade-in duration-500">
+          <div className="max-w-6xl mx-auto animate-in fade-in duration-500">
             {activeView === "analytics" && (
               <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -483,45 +568,119 @@ export default function TextbookDetailsPage() {
                     FAQ & User Prompts
                   </h2>
                   <p className="text-gray-500">
-                    Recent questions asked by students.
+                    Review frequently asked questions and shared user prompts.
                   </p>
                 </div>
 
-                <div className="space-y-4">
-                  {[
-                    "Can you explain the concept of recursion?",
-                    "What is the main argument in Chapter 3 regarding algorithms?",
-                    "How does this relate to the Turing Test?",
-                    "Summarize the introduction.",
-                    "Give me 5 practice questions for the midterm.",
-                    "Explain Big O notation simply.",
-                  ].map((q, i) => (
-                    <Card key={i} className="hover:shadow-md transition-shadow">
-                      <CardContent className="p-6">
-                        <div className="flex justify-between items-start gap-4">
-                          <div>
-                            <p className="text-lg font-medium text-gray-900">
-                              "{q}"
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* FAQs Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <HelpCircle className="h-5 w-5 text-[#2c5f7c]" />
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Frequently Asked Questions
+                      </h3>
+                    </div>
+                    {faqs.length === 0 ? (
+                      <Card className="bg-gray-50 border-dashed">
+                        <CardContent className="p-6 text-center text-gray-500">
+                          No FAQs found for this textbook.
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      faqs.map((faq) => (
+                        <Card
+                          key={faq.id}
+                          className="hover:shadow-md transition-shadow"
+                        >
+                          <CardContent className="p-5">
+                            <p className="font-medium text-gray-900 mb-2">
+                              "{faq.question_text}"
                             </p>
-                            <div className="flex items-center gap-2 mt-2">
-                              <Badge
-                                variant="outline"
-                                className="text-gray-500"
-                              >
-                                Chapter {Math.floor(Math.random() * 10) + 1}
+                            <p className="text-sm text-gray-600 line-clamp-3 mb-3">
+                              {faq.answer_text}
+                            </p>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <Badge variant="secondary" className="text-xs">
+                                Used {faq.usage_count} times
                               </Badge>
-                              <span className="text-sm text-gray-400">
-                                Asked {Math.floor(Math.random() * 24)} hours ago
+                              <span>
+                                Last used:{" "}
+                                {new Date(
+                                  faq.last_used_at
+                                ).toLocaleDateString()}
                               </span>
                             </div>
-                          </div>
-                          <Button variant="outline" size="sm">
-                            View Context
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Shared Prompts Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Share2 className="h-5 w-5 text-[#2c5f7c]" />
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Shared User Prompts
+                      </h3>
+                    </div>
+                    {sharedPrompts.length === 0 ? (
+                      <Card className="bg-gray-50 border-dashed">
+                        <CardContent className="p-6 text-center text-gray-500">
+                          No shared prompts found for this textbook.
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      sharedPrompts.map((prompt) => (
+                        <Card
+                          key={prompt.id}
+                          className="hover:shadow-md transition-shadow"
+                        >
+                          <CardContent className="p-5">
+                            <div className="flex justify-between items-start mb-2">
+                              <h4 className="font-semibold text-gray-900">
+                                {prompt.title || "Untitled Prompt"}
+                              </h4>
+                              {prompt.reported && (
+                                <Badge
+                                  variant="destructive"
+                                  className="flex items-center gap-1 text-[10px] h-5"
+                                >
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Reported
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600 line-clamp-3 mb-3 italic">
+                              "{prompt.prompt_text}"
+                            </p>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {prompt.tags?.map((tag, i) => (
+                                <Badge
+                                  key={i}
+                                  variant="outline"
+                                  className="text-[10px]"
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-gray-500 border-t pt-3 mt-2">
+                              <span className="capitalize">
+                                Role: {prompt.role || "User"}
+                              </span>
+                              <span>
+                                {new Date(
+                                  prompt.created_at
+                                ).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             )}

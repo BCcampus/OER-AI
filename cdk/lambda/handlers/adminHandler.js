@@ -421,6 +421,63 @@ exports.handler = async (event) => {
         });
         break;
 
+      // GET /admin/textbooks/{textbook_id}/faqs - Get FAQs for a specific textbook
+      case "GET /admin/textbooks/{textbook_id}/faqs":
+        const faqTextbookId = event.pathParameters?.textbook_id;
+        if (!faqTextbookId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Textbook ID is required" });
+          break;
+        }
+
+        const faqs = await sqlConnection`
+          SELECT 
+            id,
+            question_text,
+            answer_text,
+            usage_count,
+            last_used_at,
+            cached_at
+          FROM faq_cache
+          WHERE textbook_id = ${faqTextbookId}
+          ORDER BY usage_count DESC, last_used_at DESC
+          LIMIT 50
+        `;
+
+        response.statusCode = 200;
+        response.body = JSON.stringify({ faqs });
+        break;
+
+      // GET /admin/textbooks/{textbook_id}/shared_prompts - Get shared user prompts for a specific textbook
+      case "GET /admin/textbooks/{textbook_id}/shared_prompts":
+        const promptTextbookId = event.pathParameters?.textbook_id;
+        if (!promptTextbookId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Textbook ID is required" });
+          break;
+        }
+
+        const sharedPrompts = await sqlConnection`
+          SELECT 
+            id,
+            title,
+            prompt_text,
+            visibility,
+            tags,
+            role,
+            reported,
+            created_at,
+            updated_at
+          FROM shared_user_prompts
+          WHERE textbook_id = ${promptTextbookId}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `;
+
+        response.statusCode = 200;
+        response.body = JSON.stringify({ prompts: sharedPrompts });
+        break;
+
       // POST /admin/textbooks/{textbook_id}/refresh - Trigger textbook re-ingestion
       case "POST /admin/textbooks/{textbook_id}/refresh":
         const refreshTextbookId = event.pathParameters?.textbook_id;
