@@ -190,7 +190,7 @@ exports.handler = async (event) => {
           LEFT JOIN sections s ON t.id = s.textbook_id
           LEFT JOIN media_items mi ON t.id = mi.textbook_id
           WHERE t.id = ${getTextbookId}
-          GROUP BY t.id, t.title, t.authors, t.publisher, t.publish_date, t.summary, t.language, t.level, t.status, t.source_url, t.license, t.created_at, t.updated_at, t.metadata
+          GROUP BY t.id
         `;
 
         if (textbookDetails.length === 0) {
@@ -353,6 +353,72 @@ exports.handler = async (event) => {
 
         response.statusCode = 200;
         response.body = JSON.stringify({ jobs });
+        break;
+
+      // GET /admin/textbooks/{textbook_id}/analytics - Get analytics for a specific textbook
+      case "GET /admin/textbooks/{textbook_id}/analytics":
+        const analyticsTextbookId = event.pathParameters?.textbook_id;
+        if (!analyticsTextbookId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Textbook ID is required" });
+          break;
+        }
+
+        const analyticsTimeRange =
+          event.queryStringParameters?.timeRange || "3m";
+
+        // Calculate date range based on timeRange parameter
+        let analyticsDaysBack = 90; // default 3 months
+        if (analyticsTimeRange === "30d") analyticsDaysBack = 30;
+        if (analyticsTimeRange === "7d") analyticsDaysBack = 7;
+
+        const analyticsStartDate = new Date();
+        analyticsStartDate.setDate(
+          analyticsStartDate.getDate() - analyticsDaysBack
+        );
+
+        // Get time series data for users and questions specific to this textbook
+        const textbookTimeSeriesData = await sqlConnection`
+          WITH date_series AS (
+            SELECT generate_series(
+              DATE_TRUNC('day', ${analyticsStartDate.toISOString()}::timestamp),
+              DATE_TRUNC('day', NOW()),
+              '1 day'::interval
+            )::date AS date
+          ),
+          daily_users AS (
+            SELECT 
+              DATE_TRUNC('day', cs.created_at)::date AS date,
+              COUNT(DISTINCT cs.user_session_id) AS count
+            FROM chat_sessions cs
+            WHERE cs.textbook_id = ${analyticsTextbookId}
+              AND cs.created_at >= ${analyticsStartDate.toISOString()}
+            GROUP BY DATE_TRUNC('day', cs.created_at)::date
+          ),
+          daily_questions AS (
+            SELECT 
+              DATE_TRUNC('day', ui.created_at)::date AS date,
+              COUNT(ui.id) AS count
+            FROM user_interactions ui
+            JOIN chat_sessions cs ON ui.chat_session_id = cs.id
+            WHERE cs.textbook_id = ${analyticsTextbookId}
+              AND ui.created_at >= ${analyticsStartDate.toISOString()}
+            GROUP BY DATE_TRUNC('day', ui.created_at)::date
+          )
+          SELECT 
+            TO_CHAR(ds.date, 'Mon DD') AS date,
+            COALESCE(du.count, 0)::int AS users,
+            COALESCE(dq.count, 0)::int AS questions
+          FROM date_series ds
+          LEFT JOIN daily_users du ON ds.date = du.date
+          LEFT JOIN daily_questions dq ON ds.date = dq.date
+          ORDER BY ds.date ASC
+        `;
+
+        response.statusCode = 200;
+        response.body = JSON.stringify({
+          timeSeries: textbookTimeSeriesData,
+        });
         break;
 
       // POST /admin/textbooks/{textbook_id}/refresh - Trigger textbook re-ingestion

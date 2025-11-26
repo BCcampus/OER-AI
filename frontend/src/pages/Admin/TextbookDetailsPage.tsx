@@ -9,20 +9,97 @@ import {
   FileAudio,
   ArrowLeft,
   BookOpen,
+  Users,
 } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { AuthService } from "@/functions/authService";
+import MetricCard from "@/components/Admin/MetricCard";
 
-// Mock data generator (moved from previous implementation)
-const getMockTextbook = (id: string) => ({
-  id,
-  title: "Introduction to Computer Science",
-  author: "Dr. Alan Turing",
-  status: "Active",
-  users: 1250,
-  questions: 3420,
-});
+type TextbookDetails = {
+  id: string;
+  title: string;
+  authors: string[];
+  status: string;
+  user_count: number;
+  question_count: number;
+  section_count: number;
+  image_count: number;
+  video_count: number;
+  audio_count: number;
+};
+
+type TimeSeriesData = {
+  date: string;
+  users: number;
+  questions: number;
+};
+
+type TextbookAnalyticsData = {
+  timeSeries: TimeSeriesData[];
+};
+
+function ChartCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="border-gray-200 shadow-sm overflow-hidden">
+      <CardHeader className="pb-2 border-b border-gray-50 bg-gray-50/50">
+        <CardTitle className="text-base font-semibold text-gray-900">
+          {title}
+        </CardTitle>
+        <CardDescription className="text-xs">{subtitle}</CardDescription>
+      </CardHeader>
+      <CardContent className="p-6 h-[300px]">{children}</CardContent>
+    </Card>
+  );
+}
+
+function CustomTooltip({ active, payload, label }: any) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white border border-gray-200 p-3 rounded-lg shadow-xl text-sm">
+        <p className="font-semibold text-gray-900 mb-2">{label}</p>
+        {payload.map((entry: any, index: number) => (
+          <div
+            key={index}
+            className="flex items-center gap-2 text-xs text-gray-600 mb-1"
+          >
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="capitalize">{entry.name}:</span>
+            <span className="font-bold text-gray-900">{entry.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+}
 
 export default function TextbookDetailsPage() {
   const { id } = useParams();
@@ -30,18 +107,135 @@ export default function TextbookDetailsPage() {
   const [activeView, setActiveView] = useState<"analytics" | "faq" | "status">(
     "analytics"
   );
-  const [textbook, setTextbook] = useState<any>(null);
+  const [textbook, setTextbook] = useState<TextbookDetails | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<TextbookAnalyticsData>({
+    timeSeries: [],
+  });
+  const [timeRange, setTimeRange] = useState("3m");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate API fetch
     if (id) {
-      setTextbook(getMockTextbook(id));
+      fetchTextbookDetails();
+      fetchAnalytics();
     }
-  }, [id]);
+  }, [id, timeRange]);
+
+  const fetchTextbookDetails = async () => {
+    try {
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/textbooks/${id}`,
+        {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch textbook details");
+      }
+
+      const data = await response.json();
+      setTextbook(data);
+    } catch (err) {
+      console.error("Error fetching textbook details:", err);
+      setError("Failed to load textbook details");
+    }
+  };
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_ENDPOINT
+        }/admin/textbooks/${id}/analytics?timeRange=${timeRange}`,
+        {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch analytics data");
+      }
+
+      const data = await response.json();
+      console.log(data);
+      setAnalyticsData(data);
+    } catch (err) {
+      console.error("Error fetching analytics:", err);
+      // Don't set main error here to allow textbook details to show even if analytics fail
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!textbook && loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2c5f7c]"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-red-600">Error</h2>
+          <p className="text-gray-600 mt-2">{error}</p>
+          <Button
+            variant="default"
+            onClick={() => navigate("/admin/dashboard")}
+            className="mt-4"
+          >
+            Return to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (!textbook) {
-    return <div className="p-8">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Textbook Not Found
+          </h2>
+          <Button
+            variant="link"
+            onClick={() => navigate("/admin/dashboard")}
+            className="mt-4"
+          >
+            Return to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
   }
+
+  // Calculate totals from time series for the selected period
+  const totalUsersPeriod = analyticsData.timeSeries.reduce(
+    (acc, curr) => acc + Number(curr.users),
+    0
+  );
+  const totalQuestionsPeriod = analyticsData.timeSeries.reduce(
+    (acc, curr) => acc + Number(curr.questions),
+    0
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -68,7 +262,9 @@ export default function TextbookDetailsPage() {
             <h2 className="font-semibold text-gray-900 line-clamp-2">
               {textbook.title}
             </h2>
-            <p className="text-sm text-gray-500 mt-1">{textbook.author}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {textbook.authors?.join(", ") || "Unknown Author"}
+            </p>
             <Badge
               variant={textbook.status === "Active" ? "default" : "secondary"}
               className={`mt-3 ${
@@ -126,83 +322,157 @@ export default function TextbookDetailsPage() {
           <div className="max-w-5xl mx-auto animate-in fade-in duration-500">
             {activeView === "analytics" && (
               <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Analytics Overview
-                  </h2>
-                  <p className="text-gray-500">
-                    Usage statistics and engagement metrics.
-                  </p>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Analytics Overview
+                    </h2>
+                    <p className="text-gray-500">
+                      Usage statistics and engagement metrics.
+                    </p>
+                  </div>
+                  <div className="flex items-center bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
+                    <Button
+                      variant={timeRange === "3m" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setTimeRange("3m")}
+                      className="text-xs h-8"
+                    >
+                      3M
+                    </Button>
+                    <Button
+                      variant={timeRange === "30d" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setTimeRange("30d")}
+                      className="text-xs h-8"
+                    >
+                      30D
+                    </Button>
+                    <Button
+                      variant={timeRange === "7d" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setTimeRange("7d")}
+                      className="text-xs h-8"
+                    >
+                      7D
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card className="bg-blue-50 border-blue-100">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 text-blue-700 mb-2">
-                        <BarChart3 className="h-5 w-5" />
-                        <span className="font-medium">Total Views</span>
-                      </div>
-                      <p className="text-4xl font-bold text-blue-900">
-                        {Math.floor(Math.random() * 5000) + 1000}
-                      </p>
-                      <p className="text-sm text-blue-600 mt-2">
-                        +12% from last month
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-purple-50 border-purple-100">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 text-purple-700 mb-2">
-                        <MessageSquare className="h-5 w-5" />
-                        <span className="font-medium">Questions Asked</span>
-                      </div>
-                      <p className="text-4xl font-bold text-purple-900">
-                        {textbook.questions}
-                      </p>
-                      <p className="text-sm text-purple-600 mt-2">
-                        Avg. 5 questions per user
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Popular Topics</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {[
-                        "Chapter 1 Summary",
-                        "Key Concepts",
-                        "Practice Problems",
-                        "Exam Prep",
-                        "Historical Context",
-                      ].map((topic, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                        >
-                          <span className="font-medium text-gray-700">
-                            {topic}
-                          </span>
-                          <div className="flex items-center gap-4">
-                            <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-[#2c5f7c]"
-                                style={{ width: `${Math.random() * 60 + 40}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium text-gray-500 w-20 text-right">
-                              {Math.floor(Math.random() * 100)} queries
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                {loading && !analyticsData.timeSeries.length ? (
+                  <div className="flex items-center justify-center py-20">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2c5f7c]"></div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <MetricCard
+                        title="Active Users"
+                        value={totalUsersPeriod.toString()}
+                        icon={<Users className="h-5 w-5 text-blue-600" />}
+                        trend="in selected period"
+                      />
+                      <MetricCard
+                        title="Questions Asked"
+                        value={totalQuestionsPeriod.toString()}
+                        icon={
+                          <MessageSquare className="h-5 w-5 text-purple-600" />
+                        }
+                        trend="in selected period"
+                      />
                     </div>
-                  </CardContent>
-                </Card>
+
+                    <div className="grid grid-cols-1 gap-6">
+                      <ChartCard
+                        title="User Engagement"
+                        subtitle="Active users interacting with this textbook"
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={analyticsData.timeSeries}
+                            margin={{
+                              top: 10,
+                              right: 10,
+                              left: -20,
+                              bottom: 0,
+                            }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              vertical={false}
+                              stroke="#e5e7eb"
+                            />
+                            <XAxis
+                              dataKey="date"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6b7280" }}
+                              dy={10}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6b7280" }}
+                            />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Line
+                              type="monotone"
+                              dataKey="users"
+                              stroke="#2c5f7c"
+                              strokeWidth={3}
+                              dot={false}
+                              activeDot={{ r: 6, strokeWidth: 0 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </ChartCard>
+
+                      <ChartCard
+                        title="Question Volume"
+                        subtitle="Questions asked about this textbook"
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={analyticsData.timeSeries}
+                            margin={{
+                              top: 10,
+                              right: 10,
+                              left: -20,
+                              bottom: 0,
+                            }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              vertical={false}
+                              stroke="#e5e7eb"
+                            />
+                            <XAxis
+                              dataKey="date"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6b7280" }}
+                              dy={10}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6b7280" }}
+                            />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Line
+                              type="monotone"
+                              dataKey="questions"
+                              stroke="#3d7a9a"
+                              strokeWidth={3}
+                              dot={false}
+                              activeDot={{ r: 6, strokeWidth: 0 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </ChartCard>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -281,8 +551,8 @@ export default function TextbookDetailsPage() {
                           Fully Ingested
                         </p>
                         <p className="text-green-700">
-                          All 12 chapters have been processed and indexed
-                          successfully.
+                          {textbook.section_count} sections have been processed
+                          and indexed successfully.
                         </p>
                       </div>
                     </div>
