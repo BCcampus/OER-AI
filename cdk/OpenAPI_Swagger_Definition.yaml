@@ -2147,6 +2147,139 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /chat_sessions/{chat_session_id}/interactions:
+    <<: *commonOptions
+    get:
+      tags:
+        - User
+      summary: Get all interactions for a shared chat session (public endpoint)
+      operationId: get_shared_chat_interactions
+      parameters:
+        - name: chat_session_id
+          in: path
+          required: true
+          description: Chat session UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Chat session interactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_session_id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  interactions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        sender_role:
+                          type: string
+                          enum: ["AI", "User"]
+                        query_text:
+                          type: string
+                        response_text:
+                          type: string
+                        source_chunks:
+                          type: array
+                        created_at:
+                          type: string
+                          format: date-time
+                        order_index:
+                          type: integer
+        "400":
+          description: Invalid chat_session_id
+        "404":
+          description: Chat session not found
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${chatSessionFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
+  /chat_sessions/fork:
+    <<: *commonOptions
+    post:
+      tags:
+        - User
+      summary: Create a new chat session by forking an existing one
+      operationId: fork_chat_session
+      security:
+        - userAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_chat_session_id
+                - user_session_id
+                - textbook_id
+              properties:
+                source_chat_session_id:
+                  type: string
+                  format: uuid
+                  description: The chat session ID to fork from
+                user_session_id:
+                  type: string
+                  format: uuid
+                  description: The user session ID for the new chat
+                textbook_id:
+                  type: string
+                  format: uuid
+                  description: The textbook ID for the new chat session
+      responses:
+        "201":
+          description: Chat session forked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chat_session_id:
+                    type: string
+                    format: uuid
+                  user_session_id:
+                    type: string
+                    format: uuid
+                  textbook_id:
+                    type: string
+                    format: uuid
+                  interactions_copied:
+                    type: integer
+                    description: Number of interactions copied from source chat session
+                  created_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: Invalid request or source chat session not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${chatSessionFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+      x-amazon-apigateway-request-validator: all
+
   /textbooks/{textbook_id}/sections:
     <<: *commonOptions
     get:
@@ -4452,6 +4585,63 @@ paths:
       responses:
         "204":
           description: Shared user prompt deleted successfully
+        "404":
+          description: Prompt not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sharedUserPromptFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
+  /shared_prompts/{shared_prompt_id}/report:
+    <<: *commonOptions
+    post:
+      tags:
+        - User
+      summary: Report a shared user prompt
+      operationId: report_shared_prompt
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: shared_prompt_id
+          in: path
+          required: true
+          description: Shared prompt UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  maxLength: 500
+                  description: Optional comment explaining why the prompt is being reported
+      responses:
+        "200":
+          description: Prompt reported successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  reported_at:
+                    type: string
+                    format: date-time
+                  message:
+                    type: string
         "404":
           description: Prompt not found
         "401":

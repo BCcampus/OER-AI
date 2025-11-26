@@ -44,24 +44,17 @@ export function ReportPromptDialog({
       if (!tokenResp.ok) throw new Error("Failed to get auth token");
       const { token } = await tokenResp.json();
 
-      // Submit report - just mark as reported
+      // Submit report using the dedicated report endpoint
       const response = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/shared_prompts/${promptId}`,
+        `${import.meta.env.VITE_API_ENDPOINT}/shared_prompts/${promptId}/report`,
         {
-          method: "PUT",
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            reported: true,
-            // Include comment in metadata if provided
-            ...(comment.trim() && {
-              metadata: {
-                report_comment: comment.trim(),
-                reported_at: new Date().toISOString(),
-              },
-            }),
+            comment: comment.trim() || undefined,
           }),
         }
       );

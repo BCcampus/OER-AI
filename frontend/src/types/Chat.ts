@@ -47,4 +47,11 @@ export interface Message {
     questionIndex: number;
     totalQuestions: number;
   };
+  isFromSharedChat?: boolean;
+}
+
+export interface SharedChatMetadata {
+  originalChatSessionId: string;
+  isSharedView: boolean;
+  hasForked: boolean;
 }
