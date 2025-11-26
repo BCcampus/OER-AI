@@ -5,6 +5,7 @@ import PromptCard from "@/components/ChatInterface/PromptCard";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
 import GuidedQuestionMessage from "@/components/ChatInterface/GuidedQuestionMessage";
+import ShareChatButton from "@/components/ChatInterface/ShareChatButton";
 import { Button } from "@/components/ui/button";
 import PromptLibraryModal from "@/components/ChatInterface/PromptLibraryModal";
 import { useTextbookView } from "@/providers/textbookView";
@@ -35,14 +36,22 @@ export default function AIChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [seeMore, setSeeMore] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  
+  // Shared chat state
+  const [sharedChatSessionId, setSharedChatSessionId] = useState<string | null>(null);
+  const [isLoadingSharedChat, setIsLoadingSharedChat] = useState(false);
+  const [hasForkedChat, setHasForkedChat] = useState(false);
+  const [sharedChatError, setSharedChatError] = useState<string | null>(null);
 
   const {
     textbook,
     activeChatSessionId,
+    setActiveChatSessionId,
     chatSessions,
     createNewChatSession,
     isLoadingChatSessions,
     updateChatSessionName,
+    refreshChatSessions,
   } = useTextbookView();
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -200,8 +209,121 @@ export default function AIChatPage() {
     },
   });
 
+  // Detect and load shared chat from URL parameter
+  useEffect(() => {
+    const shareParam = searchParams.get("share");
+    
+    if (!shareParam || sharedChatSessionId) {
+      return; // No share parameter or already loaded
+    }
+
+    const loadSharedChat = async () => {
+      setIsLoadingSharedChat(true);
+      setSharedChatError(null);
+      
+      try {
+        // Get public token
+        const tokenResponse = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
+        );
+        if (!tokenResponse.ok) throw new Error("Failed to get public token");
+        const { token } = await tokenResponse.json();
+
+        // Fetch shared chat history from the public endpoint
+        const response = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/chat_sessions/${shareParam}/interactions`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Chat session not found");
+          }
+          throw new Error("Failed to load shared chat");
+        }
+
+        interface SharedInteraction {
+          id: string;
+          sender_role: string;
+          query_text?: string;
+          response_text?: string;
+          source_chunks?: string[];
+          created_at: string;
+          order_index?: number;
+        }
+
+        const data: { 
+          chat_session_id: string;
+          textbook_id: string;
+          interactions: SharedInteraction[] 
+        } = await response.json();
+
+        const chatMessages: Message[] = [];
+
+        // Convert interactions to messages
+        data.interactions.forEach((interaction) => {
+          const baseTime = new Date(interaction.created_at).getTime();
+
+          // Add user message if query_text exists
+          if (interaction.query_text) {
+            chatMessages.push({
+              id: `${interaction.id}-user`,
+              sender: "user" as const,
+              text: interaction.query_text,
+              sources_used: [],
+              time: baseTime,
+              isFromSharedChat: true,
+            });
+          }
+
+          // Add AI response if response_text exists
+          if (interaction.response_text) {
+            chatMessages.push({
+              id: `${interaction.id}-ai`,
+              sender: "bot" as const,
+              text: interaction.response_text,
+              sources_used: interaction.source_chunks || [],
+              time: baseTime + 1,
+              isFromSharedChat: true,
+            });
+          }
+        });
+
+        // Sort by creation time
+        chatMessages.sort((a, b) => a.time - b.time);
+
+        setMessages(chatMessages);
+        setSharedChatSessionId(shareParam);
+        
+      } catch (error) {
+        console.error("Failed to load shared chat:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to load shared chat";
+        setSharedChatError(errorMessage);
+        
+        // Redirect to new chat after 3 seconds for invalid links
+        setTimeout(() => {
+          setSearchParams({});
+          setSharedChatError(null);
+        }, 3000);
+      } finally {
+        setIsLoadingSharedChat(false);
+      }
+    };
+
+    loadSharedChat();
+  }, [searchParams, sharedChatSessionId, setSearchParams]);
+
   // Load chat history and redirect if no chat session ID
   useEffect(() => {
+    // Skip loading history if we're viewing a shared chat
+    if (sharedChatSessionId && !hasForkedChat) {
+      return;
+    }
+    
     if (!activeChatSessionId) {
       return;
     }
@@ -282,7 +404,7 @@ export default function AIChatPage() {
     };
 
     loadChatHistory();
-  }, [activeChatSessionId, sessionUuid]);
+  }, [activeChatSessionId, sessionUuid, sharedChatSessionId, hasForkedChat]);
 
   // Fetch prompt templates from API
   useEffect(() => {
@@ -417,7 +539,76 @@ export default function AIChatPage() {
 
   async function sendMessage() {
     let text = message.trim();
-    if (!text || !activeChatSessionId || !textbook) return;
+    if (!text || !textbook) return;
+
+    // Handle forking shared chat on first message
+    if (sharedChatSessionId && !hasForkedChat) {
+      try {
+        // Get public token
+        const tokenResponse = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
+        );
+        if (!tokenResponse.ok) throw new Error("Failed to get public token");
+        const { token } = await tokenResponse.json();
+
+        // Call fork endpoint
+        const forkResponse = await fetch(
+          `${import.meta.env.VITE_API_ENDPOINT}/chat_sessions/fork`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              source_chat_session_id: sharedChatSessionId,
+              user_session_id: sessionUuid,
+              textbook_id: textbook.id,
+            }),
+          }
+        );
+
+        if (!forkResponse.ok) {
+          throw new Error("Failed to fork chat session");
+        }
+
+        const forkData = await forkResponse.json();
+        const newChatSessionId = forkData.chat_session_id;
+
+        // Update state to reflect the forked chat
+        setHasForkedChat(true);
+        setActiveChatSessionId(newChatSessionId);
+        
+        // Refresh chat sessions to show the new forked session in sidebar
+        await refreshChatSessions();
+        
+        // Remove 'share' parameter from URL
+        setSearchParams({});
+        
+        // Mark all existing messages as no longer from shared chat
+        setMessages((prev) =>
+          prev.map((msg) => ({ ...msg, isFromSharedChat: false }))
+        );
+
+        // Continue with sending the message using the new chat session
+        // The rest of the function will handle this
+      } catch (error) {
+        console.error("Failed to fork chat session:", error);
+        
+        // Show error message to user
+        const errorMsg: Message = {
+          id: `error-${Date.now()}`,
+          sender: "bot",
+          text: "Failed to create your copy of this chat. Please try again or start a new chat.",
+          time: Date.now(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+        return;
+      }
+    }
+
+    // Ensure we have an active chat session
+    if (!activeChatSessionId) return;
 
     // Handle guided conversation state
     if (guidedState.isActive) {
@@ -726,7 +917,35 @@ export default function AIChatPage() {
             ) : (
               /* messages area */
               <div className="flex flex-col gap-4 mb-6">
-                {isLoadingHistory ? (
+                {/* Chat header with share button */}
+                {messages.length > 0 && activeChatSessionId && textbook?.id && !sharedChatSessionId && (
+                  <div className="flex justify-end items-center mb-2">
+                    <ShareChatButton
+                      chatSessionId={activeChatSessionId}
+                      textbookId={textbook.id}
+                      disabled={false}
+                    />
+                  </div>
+                )}
+                
+                {/* Show shared chat loading state */}
+                {isLoadingSharedChat ? (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-muted-foreground">
+                      Loading shared chat...
+                    </p>
+                  </div>
+                ) : sharedChatError ? (
+                  /* Show error message for invalid shared chat */
+                  <div className="flex flex-col items-center justify-center py-8 gap-2">
+                    <p className="text-destructive font-medium">
+                      {sharedChatError}
+                    </p>
+                    <p className="text-muted-foreground text-sm">
+                      Redirecting to new chat...
+                    </p>
+                  </div>
+                ) : isLoadingHistory ? (
                   <div className="flex items-center justify-center py-8">
                     <p className="text-muted-foreground">
                       Loading chat history...
@@ -734,6 +953,14 @@ export default function AIChatPage() {
                   </div>
                 ) : (
                   <>
+                    {/* Show banner if viewing shared chat */}
+                    {sharedChatSessionId && !hasForkedChat && (
+                      <div className="bg-muted/50 border border-border rounded-lg p-4 mb-4">
+                        <p className="text-sm text-muted-foreground">
+                          You're viewing a shared conversation. Send a message to continue this chat in your own session.
+                        </p>
+                      </div>
+                    )}
                     {messages.map((m) => messageFormatter(m))}
                     <div ref={messagesEndRef} />
                   </>
