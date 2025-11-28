@@ -353,13 +353,13 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // Waf Firewall - Enhanced with endpoint-specific and authentication-aware rate limiting
     const waf = new wafv2.CfnWebACL(this, `${id}-waf`, {
-      description: "Enhanced WAF with endpoint-specific rate limiting",
+      description: "WAF for OER",
       scope: "REGIONAL",
       defaultAction: { allow: {} },
       visibilityConfig: {
         sampledRequestsEnabled: true,
         cloudWatchMetricsEnabled: true,
-        metricName: "DFO-firewall",
+        metricName: "OER-firewall",
       },
       rules: [
         // Rule 1: AWS Managed Common Rule Set (SQL injection, XSS, etc.)
