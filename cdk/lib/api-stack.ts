@@ -10,6 +10,7 @@ import { Code, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
+import { DataPipelineStack } from "./data-pipeline-stack";
 import * as apigatewayv2 from "aws-cdk-lib/aws-apigatewayv2";
 import { WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { Fn } from "aws-cdk-lib";
@@ -26,6 +27,7 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
+  csvBucket: s3.Bucket;
 }
 
 export class ApiGatewayStack extends cdk.Stack {
@@ -297,9 +299,50 @@ export class ApiGatewayStack extends cdk.Stack {
           user: true,
         }),
         methodOptions: {
+          // Default for all endpoints
           "/*/*": {
             throttlingRateLimit: 100,
             throttlingBurstLimit: 200,
+          },
+
+          // EXPENSIVE: Practice material generation (AI calls to Bedrock)
+          "/textbooks/*/practice_materials/POST": {
+            throttlingRateLimit: 5, // Only 5/sec (down from 100)
+            throttlingBurstLimit: 10, // Only 10 concurrent (down from 200)
+          },
+
+          // MODERATE: Chat endpoints (streaming AI)
+          "/textbooks/*/chat_sessions/POST": {
+            throttlingRateLimit: 20, // 20/sec (down from 100)
+            throttlingBurstLimit: 40,
+          },
+
+          "/textbooks/*/chat_sessions/*/messages/POST": {
+            throttlingRateLimit: 20,
+            throttlingBurstLimit: 40,
+          },
+
+          // CHEAP: Read operations (just database queries)
+          "/textbooks/GET": {
+            throttlingRateLimit: 200, // 200/sec (UP from 100)
+            throttlingBurstLimit: 400,
+          },
+
+          "/textbooks/*/GET": {
+            throttlingRateLimit: 200,
+            throttlingBurstLimit: 400,
+          },
+
+          // MODERATE: FAQ operations
+          "/textbooks/*/faq/POST": {
+            throttlingRateLimit: 10,
+            throttlingBurstLimit: 20,
+          },
+
+          // FREQUENT: Public token endpoint
+          "/user/publicToken/GET": {
+            throttlingRateLimit: 50,
+            throttlingBurstLimit: 100,
           },
         },
       },
@@ -308,17 +351,18 @@ export class ApiGatewayStack extends cdk.Stack {
     this.stageARN_APIGW = this.api.deploymentStage.stageArn;
     this.apiGW_basedURL = this.api.urlForPath();
 
-    // Waf Firewall
+    // Waf Firewall - Enhanced with endpoint-specific and authentication-aware rate limiting
     const waf = new wafv2.CfnWebACL(this, `${id}-waf`, {
-      description: "waf for DFO",
+      description: "WAF for OER",
       scope: "REGIONAL",
       defaultAction: { allow: {} },
       visibilityConfig: {
         sampledRequestsEnabled: true,
         cloudWatchMetricsEnabled: true,
-        metricName: "DFO-firewall",
+        metricName: "OER-firewall",
       },
       rules: [
+        // Rule 1: AWS Managed Common Rule Set (SQL injection, XSS, etc.)
         {
           name: "AWS-AWSManagedRulesCommonRuleSet",
           priority: 1,
@@ -335,22 +379,141 @@ export class ApiGatewayStack extends cdk.Stack {
             metricName: "AWS-AWSManagedRulesCommonRuleSet",
           },
         },
+
+        // Rule 2: Strict limit for unauthenticated requests (100 req/5min per IP)
         {
-          name: "LimitRequests1000",
+          name: "LimitUnauthenticatedRequests",
           priority: 2,
           action: {
             block: {},
           },
           statement: {
             rateBasedStatement: {
-              limit: 1000,
+              limit: 100, // Reduced from 1000 to 100 for anonymous users
               aggregateKeyType: "IP",
+              scopeDownStatement: {
+                // Only apply to requests WITHOUT Authorization header
+                notStatement: {
+                  statement: {
+                    byteMatchStatement: {
+                      searchString: "Bearer",
+                      fieldToMatch: {
+                        singleHeader: {
+                          name: "authorization",
+                        },
+                      },
+                      textTransformations: [
+                        {
+                          priority: 0,
+                          type: "NONE",
+                        },
+                      ],
+                      positionalConstraint: "CONTAINS",
+                    },
+                  },
+                },
+              },
             },
           },
           visibilityConfig: {
             sampledRequestsEnabled: true,
             cloudWatchMetricsEnabled: true,
-            metricName: "LimitRequests1000",
+            metricName: "LimitUnauthenticatedRequests",
+          },
+        },
+
+        // Rule 3: More lenient for authenticated requests (2000 req/5min per IP)
+        {
+          name: "LimitAuthenticatedRequests",
+          priority: 3,
+          action: {
+            block: {},
+          },
+          statement: {
+            rateBasedStatement: {
+              limit: 2000, // Increased from 1000 to 2000 for authenticated users
+              aggregateKeyType: "IP",
+              scopeDownStatement: {
+                // Only apply to requests WITH Authorization header
+                byteMatchStatement: {
+                  searchString: "Bearer",
+                  fieldToMatch: {
+                    singleHeader: {
+                      name: "authorization",
+                    },
+                  },
+                  textTransformations: [
+                    {
+                      priority: 0,
+                      type: "NONE",
+                    },
+                  ],
+                  positionalConstraint: "CONTAINS",
+                },
+              },
+            },
+          },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "LimitAuthenticatedRequests",
+          },
+        },
+
+        // Rule 4: Very strict limit for expensive AI endpoints (50 req/5min per IP)
+        {
+          name: "LimitExpensiveEndpoints",
+          priority: 4,
+          action: {
+            block: {},
+          },
+          statement: {
+            rateBasedStatement: {
+              limit: 50, // Very strict for AI generation endpoints
+              aggregateKeyType: "IP",
+              scopeDownStatement: {
+                // Apply to practice_materials and chat_sessions endpoints
+                orStatement: {
+                  statements: [
+                    {
+                      byteMatchStatement: {
+                        searchString: "/practice_materials",
+                        fieldToMatch: {
+                          uriPath: {},
+                        },
+                        textTransformations: [
+                          {
+                            priority: 0,
+                            type: "NONE",
+                          },
+                        ],
+                        positionalConstraint: "CONTAINS",
+                      },
+                    },
+                    {
+                      byteMatchStatement: {
+                        searchString: "/chat_sessions",
+                        fieldToMatch: {
+                          uriPath: {},
+                        },
+                        textTransformations: [
+                          {
+                            priority: 0,
+                            type: "NONE",
+                          },
+                        ],
+                        positionalConstraint: "CONTAINS",
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "LimitExpensiveEndpoints",
           },
         },
       ],
@@ -676,6 +839,34 @@ export class ApiGatewayStack extends cdk.Stack {
     const apiGW_publicTokenFunction = publicTokenLambda.node
       .defaultChild as lambda.CfnFunction;
     apiGW_publicTokenFunction.overrideLogicalId("PublicTokenFunction");
+
+    const presignedUrlFunction = new lambda.Function(
+      this,
+      `${id}-PresignedUrlFunction`,
+      {
+        functionName: `${id}-presigned-url-generator`,
+        runtime: lambda.Runtime.PYTHON_3_11,
+        code: lambda.Code.fromAsset("lambda/generatePresignedURL"),
+        handler: "generatePreSignedURL.lambda_handler",
+        timeout: Duration.seconds(30),
+        memorySize: 128,
+        environment: {
+          BUCKET: props.csvBucket.bucketName,
+          REGION: this.region,
+        },
+        role: lambdaRole,
+      }
+    );
+
+    props.csvBucket.grantPut(presignedUrlFunction);
+
+    presignedUrlFunction.grantInvoke(
+      new iam.ServicePrincipal("apigateway.amazonaws.com")
+    );
+
+    const apiGW_presignedUrlFunction = presignedUrlFunction.node
+      .defaultChild as lambda.CfnFunction;
+    apiGW_presignedUrlFunction.overrideLogicalId("presignedUrlFunction");
 
     const preSignupLambda = new lambda.Function(this, `preSignupLambda`, {
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -1512,6 +1703,32 @@ export class ApiGatewayStack extends cdk.Stack {
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
           // Cohere embeddings model (for retrieval)
           `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
+        ],
+      })
+    );
+
+    // Create Lambda function for generating pre-signed URLs
+    const presignedUrlRole = new iam.Role(this, `${id}-PresignedUrlRole`, {
+      roleName: `${id}-PresignedUrlRole`,
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "service-role/AWSLambdaBasicExecutionRole"
+        ),
+      ],
+    });
+
+    // Add explicit CloudWatch Logs permissions
+    presignedUrlRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        resources: [
+          `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/${id}-presigned-url-generator:*`,
         ],
       })
     );
