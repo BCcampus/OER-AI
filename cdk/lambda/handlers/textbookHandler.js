@@ -111,7 +111,7 @@ exports.handler = async (event) => {
         }
 
         const textbook = await sqlConnection`
-          SELECT id, title, authors, license, source_url, publisher, publish_date, summary, language, level, created_at, updated_at, metadata
+          SELECT id, title, authors, license, source_url, publisher, publish_date, summary, language, level, textbook_logo_url, created_at, updated_at, metadata
           FROM textbooks
           WHERE id = ${textbookId}
         `;
