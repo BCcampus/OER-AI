@@ -212,5 +212,47 @@ export class DatabaseStack extends Stack {
     this.dbInstance.grantConnect(rdsProxyRole);
 
     this.rdsProxyEndpoint = rdsProxy.endpoint;
+
+    /**
+     * Enable automatic secret rotation for database credentials
+     */
+    
+    // 1. Rotation for admin credentials (single-user strategy)
+    const adminSecretForRotation = secretmanager.Secret.fromSecretNameV2(
+      this,
+      "AdminSecretForRotation",
+      this.secretPathAdminName
+    );
+
+    adminSecretForRotation.addRotationSchedule("AdminRotation", {
+      automaticallyAfter: Duration.days(30), // Rotate every 30 days
+      hostedRotation: secretsmanager.HostedRotation.postgreSqlSingleUser({
+        vpc: vpcStack.vpc,
+      }),
+    });
+
+    // 2. Rotation for application user credentials (multi-user strategy)
+    this.secretPathUser.addRotationSchedule("UserRotation", {
+      automaticallyAfter: Duration.days(30),
+      hostedRotation: secretsmanager.HostedRotation.postgreSqlMultiUser({
+        vpc: vpcStack.vpc,
+        masterSecret: adminSecretForRotation,
+      }),
+    });
+
+    // 3. Rotation for table creator credentials (multi-user strategy)
+    this.secretPathTableCreator.addRotationSchedule("TableCreatorRotation", {
+      automaticallyAfter: Duration.days(30),
+      hostedRotation: secretsmanager.HostedRotation.postgreSqlMultiUser({
+        vpc: vpcStack.vpc,
+        masterSecret: adminSecretForRotation,
+      }),
+    });
+
+    // Note: AWS HostedRotation automatically creates and configures:
+    // - Rotation Lambda functions in the VPC
+    // - Required IAM permissions for Secrets Manager and RDS
+    // - Security group rules for database connectivity
+    // - Multi-user strategy creates alternating users (A/B) for zero-downtime rotation
   }
 }
