@@ -33,10 +33,14 @@ export default function HomePage() {
 
   // Check if user has seen the welcome message
   useEffect(() => {
-    const hasSeenWelcome = localStorage.getItem("hasSeenWelcome");
-    if (!hasSeenWelcome) {
-      setShowWelcome(true);
-      localStorage.setItem("hasSeenWelcome", "true");
+    try {
+      const hasSeenWelcome = localStorage.getItem("hasSeenWelcome");
+      if (!hasSeenWelcome) {
+        setShowWelcome(true);
+        localStorage.setItem("hasSeenWelcome", "true");
+      }
+    } catch (error) {
+      console.error("Failed to access localStorage:", error);
     }
   }, []);
 
