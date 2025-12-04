@@ -312,7 +312,7 @@ export default function Analytics() {
                   />
                   <Bar dataKey="count" fill="#2c5f7c">
                     {analyticsData.practiceAnalytics.by_type.map(
-                      (entry, index) => (
+                      (__, index) => (
                         <Cell
                           key={`cell-${index}`}
                           fill={COLORS[index % COLORS.length]}
