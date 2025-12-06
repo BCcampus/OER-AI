@@ -14,7 +14,7 @@ This prototype explores how Large Language Models (LLMs) can enhance educational
 
 ## High-Level Architecture
 
-The following architecture diagram illustrates the various AWS components utilized to deliver the solution. For an in-depth explanation of the frontend and backend stacks, please look at the [Architecture Deep Dive](Docs/architectureDeepDive.md).
+The following architecture diagram illustrates the various AWS components utilized to deliver the solution. For an in-depth explanation of the frontend and backend stacks, please look at the [Architecture Deep Dive](Docs/ArchitectureDeepDive.md).
 
 ![Architecture Diagram](Docs/media/architecture-diagram.png)
 
@@ -24,7 +24,7 @@ To deploy this solution, please follow the steps laid out in the [Deployment Gui
 
 ## User Guide
 
-Please refer to the [Web App User Guide](Docs/userGuide.md) for instructions on navigating the web app interface.
+Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on navigating the web app interface.
 
 ## Directories
 
@@ -59,22 +59,45 @@ Please refer to the [Web App User Guide](Docs/userGuide.md) for instructions on 
 │   └── OpenAPI_Swagger_Definition.yaml
 
 ├── Docs/
+│   ├── media/
+│   ├── API_DOCUMENTATION.pdf/
+│   ├── USER_GUIDE.md
 │   └── DEPLOYMENT_GUIDE.md
 
 ├── frontend/
 │   ├── public/
 │   └── src/
+│       ├── assets/
 │       ├── components/
 │       │   ├── Admin/
 │       │   ├── ChatInterface/
-│       │   ├── PracticeMaterial/
-│       │   └── ui/
+│       │   ├── FAQPage/
+│       │   ├── HomePage/
+│       │   ├── MaterialEditorPage/
+│       │   ├── PracticeMaterialPage/
+│       │   ├── ui/
+│       │   ├── Footer.tsx
+│       │   ├── Header.tsx
+│       │   ├── HomePageHeader.tsx
+│       │   └── ProtectedRoute.tsx
 │       ├── contexts/
+│       ├── functions/
+│       ├── hooks/
+│       ├── layouts/
 │       ├── lib/
 │       ├── pages/
 │       │   ├── Admin/
 │       │   ├── ChatInterface/
-│       │   └── PracticeMaterial/
+│       │   ├── FAQ/
+│       │   ├── MaterialEditor/
+│       │   ├── PracticeMaterial/
+│       │   ├── HomePage.tsx
+│       │   └── UserGuidelines.tsx
+│       ├── providers/
+│       ├── types/
+│       ├── utils/
+│       ├── App.tsx
+│       ├── index.css
 │       └── main.tsx
 ```
 
@@ -106,11 +129,32 @@ Please refer to the [Web App User Guide](Docs/userGuide.md) for instructions on 
    - `OpenAPI_Swagger_Definition.yaml`: API specification for the OER-AI service
 2. `/Docs`: Contains comprehensive documentation for the application
    - `DEPLOYMENT_GUIDE.md`: Step-by-step deployment instructions
+   - `USER_GUIDE.md` : Complete overview on how to use the application
+   - `API_DOCUMENTATION.pdf` : Documentation of all API endpoints
 3. `/frontend`: Contains the React + TypeScript user interface
-   - `/components`: Reusable UI components for admin, chat, and practice materials
-   - `/contexts`: React contexts for state management
-   - `/lib`: Utility functions and API clients
-   - `/pages`: Main application pages and routes
+   - `/src/assets`: Static assets (images, icons, etc.)
+   - `/src/components`: Reusable UI components
+     - `/Admin`: Admin dashboard components
+     - `/ChatInterface`: Chat UI and message components
+     - `/FAQPage`: FAQ display and management components
+     - `/HomePage`: Landing page components
+     - `/MaterialEditorPage`: Material editor UI components
+     - `/PracticeMaterialPage`: Practice material generation components
+     - `/ui`: shadcn/ui base components (buttons, dialogs, cards, etc.)
+   - `/src/contexts`: Legacy React contexts for state management
+   - `/src/functions`: Helper functions and business logic
+   - `/src/hooks`: Custom React hooks (useWebSocket, etc.)
+   - `/src/layouts`: Page layout components (TextbookLayout, etc.)
+   - `/src/lib`: Utility functions and API clients
+   - `/src/pages`: Main application pages and routes
+     - `/Admin`: Admin dashboard pages (login, textbook management, analytics)
+     - `/ChatInterface`: Chat interface page
+     - `/FAQ`: FAQ page
+     - `/MaterialEditor`: Material editor page
+     - `/PracticeMaterial`: Practice material generation page
+   - `/src/providers`: React Context providers (ModeProvider, UserSessionProvider, SidebarProvider, TextbookViewProvider)
+   - `/src/types`: TypeScript type definitions
+   - `/src/utils`: Utility functions (PDF export, etc.)
 
 ## Database Schema
 
