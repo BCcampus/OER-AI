@@ -307,6 +307,18 @@ exports.handler = async (event) => {
           break;
         }
 
+        // Delete associated LangChain collection (vector store)
+        try {
+          await sqlConnection`
+            DELETE FROM langchain_pg_collection WHERE name = ${deleteTextbookId}
+          `;
+        } catch (error) {
+          console.warn(
+            "Error deleting langchain collection (might not exist):",
+            error
+          );
+        }
+
         const deletedTextbook = await sqlConnection`
           DELETE FROM textbooks WHERE id = ${deleteTextbookId} RETURNING id
         `;
