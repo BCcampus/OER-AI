@@ -287,7 +287,8 @@ def extract_book_information(soup):
     """
     result = {
         "description": None,
-        "license_url": None
+        "license_url": None,
+        "logo_url": None
     }
 
     # Prefer the container with id="block-info" or any section with class block-info
@@ -325,6 +326,24 @@ def extract_book_information(soup):
             # no subtitle; just process whole block
             result["description"] = _text_with_lists(inner) or None
     result['license_url'] = extract_license_url(soup)
+    
+    # LOGO/COVER IMAGE
+    # Extract the book cover image from the header using CSS selector
+    logo_img = soup.select_one(".book-header__cover__image > img")
+    if logo_img:
+        logo_src = logo_img.get('src')
+        if logo_src:
+            # Make absolute URL if it's relative
+            if logo_src.startswith('http'):
+                result['logo_url'] = logo_src
+            else:
+                # For relative URLs, we'll store them as-is and let the frontend handle the base URL
+                result['logo_url'] = logo_src
+            logger.info(f"Extracted logo URL: {result['logo_url']}")
+        else:
+            logger.warning("Logo image found but no src attribute")
+    else:
+        logger.warning("Logo image not found using CSS selector")
 
     return result
 
@@ -1293,14 +1312,14 @@ def main():
             cursor = conn.cursor()
             
             query = """
-            INSERT INTO textbooks (title, authors, license, source_url, publisher, publish_date, summary, language, level, metadata)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO textbooks (title, authors, license, source_url, publisher, publish_date, summary, language, level, metadata, textbook_logo_url)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
             """
             
             # Parse authors from metadata
-            authors_str = combined_metadata.get('Authors', '')
-            authors = [a.strip() for a in re.split(r'[,;]|\band\b', s, flags=re.IGNORECASE) if a.strip()] if s else []
+            authors_str = combined_metadata.get('author', combined_metadata.get('Author', combined_metadata.get('Authors', '')))
+            authors = [a.strip() for a in re.split(r'[,;]|\band\b', authors_str, flags=re.IGNORECASE) if a.strip()] if authors_str else []
             
             # Parse publication date
             pub_date_str = combined_metadata.get('Publication Date', '')
@@ -1330,7 +1349,8 @@ def main():
                 book_info.get('description'),
                 'English',
                 combined_metadata.get('Primary Subject'),
-                json.dumps(additional_metadata)
+                json.dumps(additional_metadata),
+                book_info.get('logo_url', "")
             )
             
             cursor.execute(query, params)

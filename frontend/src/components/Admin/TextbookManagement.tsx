@@ -112,10 +112,10 @@ export default function TextbookManagement() {
         throw new Error("Failed to generate upload URL");
       }
 
-      const { presignedurl } = await presignedResponse.json();
+      const { presignedUrl } = await presignedResponse.json();
 
       // 2. Upload file to S3
-      const uploadResponse = await fetch(presignedurl, {
+      const uploadResponse = await fetch(presignedUrl, {
         method: "PUT",
         headers: {
           "Content-Type": file.type || "text/csv",

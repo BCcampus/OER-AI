@@ -61,7 +61,7 @@ export class DataPipelineStack extends cdk.Stack {
         queueName: `${id}-textbook-ingestion-queue.fifo`,
         fifo: true,
         contentBasedDeduplication: true,
-        visibilityTimeout: Duration.minutes(15),
+        visibilityTimeout: Duration.minutes(5),
         retentionPeriod: Duration.days(14),
         deadLetterQueue: {
           queue: new sqs.Queue(this, `${id}-textbook-ingestion-dlq`, {
@@ -70,7 +70,7 @@ export class DataPipelineStack extends cdk.Stack {
             contentBasedDeduplication: true,
             retentionPeriod: Duration.days(14),
           }),
-          maxReceiveCount: 3,
+          maxReceiveCount: 10,
         },
       }
     );
@@ -185,6 +185,7 @@ export class DataPipelineStack extends cdk.Stack {
         environment: {
           DATA_PROCESSING_BUCKET: this.csvBucket.bucketName,
           REGION: this.region,
+          MAX_CONCURRENT_GLUE_JOBS: "3",
         },
       }
     );
@@ -323,7 +324,7 @@ export class DataPipelineStack extends cdk.Stack {
 
     const PYTHON_VER = "3";
     const GLUE_VER = "5.0";
-    const MAX_CONCURRENT_RUNS = 5;
+    const MAX_CONCURRENT_RUNS = 3;
     const MAX_RETRIES = 0;
     const MAX_CAPACITY = 2;
     const TIMEOUT = 2880;
