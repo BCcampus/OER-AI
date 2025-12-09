@@ -8,6 +8,7 @@ This guide provides instructions on how to modify and extend the OER-AI (Opterna
 
 - [Modifying Colors and Styles](#modifying-colors-and-styles)
 - [Admin & Public Token](#admin--public-token)
+- [Using External Identity Providers (Enterprise SSO)](#using-external-identity-providers-enterprise-sso)
 - [Extending the API](#extending-the-api)
 - [Modifying Frontend Components](#modifying-frontend-components)
 - [Changing Website License (Footer)](#changing-website-license-footer)
@@ -72,6 +73,36 @@ Implementation references:
 - `frontend/src/components/ProtectedRoute.tsx` — admin route protection
 
 Note: If you want students to sign up as users (not just admins), enable `selfSignUpEnabled: true` and provide a suitable UI flow (sign up / confirm) and adapt the public-token fallback to use Cognito tokens where needed.
+
+## Using External Identity Providers (Enterprise SSO)
+
+For organizations that want to leverage existing identity providers instead of managing credentials directly in Cognito, Amazon Cognito allows federation with SAML and OpenID Connect (OIDC) providers. This enables secure Single Sign-On (SSO) and centralized user management.
+
+#### What is Identity Federation?
+
+Identity federation enables your users to authenticate using an external identity provider (Okta, Azure AD, Keycloak, etc.) and then access the application using the same identity. This allows:
+- Single Sign-On across internal and external applications
+- Centralized identity and access management through your enterprise IdP
+- Consistent application of MFA and password policies managed by your IdP
+
+#### Supported Federation Types
+
+1. **SAML 2.0** - Common for enterprise IdPs
+  - Examples: Okta, Shibboleth, Azure AD, OneLogin
+  - AWS docs: <https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-saml-idp.html>
+
+2. **OpenID Connect (OIDC)** - Modern OAuth-compliant providers
+  - Examples: Google, Keycloak, Auth0, Azure AD
+  - AWS docs: <https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-oidc-idp.html>
+
+#### Integration notes
+
+- Configure an identity provider in Cognito via the console or CDK (`CfnIdentityProvider`) and attach it to your user pool.
+- Confirm correct attribute mappings (e.g., username, email, groups) so application roles (like `admin`) can be attributed or mapped.
+- If you use a hosted UI for sign-in, update the redirect and callback URIs for the provider to include Amplify / web app endpoints.
+- Consider disabling self-registration if you want to manage users via your IdP.
+
+For further details, see the links above and the AWS documentation.
 
 ---
 

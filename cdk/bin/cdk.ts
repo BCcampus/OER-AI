@@ -73,6 +73,8 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
     "cdk/lambda/practiceMaterial/**",
   ],
 });
+cicdStack.addDependency(dataPipelineStack);
+
 const apiStack = new ApiGatewayStack(
   app,
   `${StackPrefix}-Api`,
@@ -84,7 +86,10 @@ const apiStack = new ApiGatewayStack(
     csvBucket: dataPipelineStack.csvBucket,
   }
 );
+apiStack.addDependency(cicdStack);
+
 const amplifyStack = new AmplifyStack(app, `${StackPrefix}-Amplify`, apiStack, {
   env,
   githubRepo: githubRepo,
 });
+amplifyStack.addDependency(apiStack);

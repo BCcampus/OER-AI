@@ -38,6 +38,8 @@ Before you deploy, you must have the following installed on your device:
 
 For optimal performance, it is recommended to request higher invocation quotas for Bedrock LLM models before deployment. The default quotas may be insufficient for processing concurrent requests or high-volume usage.
 
+For detailed information about Bedrock service quotas, see the [AWS Bedrock Service Quotas documentation](https://docs.aws.amazon.com/general/latest/gr/bedrock.html#limits_bedrock).
+
 To request quota increases:
 
 1. Navigate to the **AWS Service Quotas** console in your AWS account
@@ -248,6 +250,8 @@ aws secretsmanager create-secret \
 
 It's time to set up everything that goes on behind the scenes! For more information on how the backend works, feel free to refer to the Architecture documentation, but an understanding of the backend is not necessary for deployment.
 
+If you are new to CDK, note that the AWS Cloud Development Kit (CDK) lets you define cloud infrastructure using code. Review the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/) for a quick primer before proceeding.
+
 Open a terminal in the `/cdk` directory.
 
 **Initialize the CDK stack** (required only if you have not deployed any resources with CDK in this region before). Please replace `<YOUR-PROFILE-NAME>` with the appropriate AWS profile used earlier.
@@ -284,6 +288,56 @@ cdk deploy --all \
 ```
 
 **Note:** The deployment process may take 15-30 minutes to complete. You will be prompted to approve IAM changes and security group modifications during deployment.
+
+### CodePipeline & ECR image bootstrapping (fresh deployment gotchas)
+
+When deploying the stack for the first time, CodePipeline/CodeBuild may create ECR repositories but no container images exist yet — the pipeline itself performs the build and push of Docker images required by Docker-based Lambda functions. If CodePipeline hasn't been started yet, Lambdas that reference these images may briefly report `Image not found` errors or may fail to start until images are published.
+
+To resolve this, choose one of the following options:
+
+1. Manually start the pipeline (recommended):
+  - Console: AWS Console → **CodePipeline** → select your pipeline (`<STACK-PREFIX>-pipeline`) → **Release change** or **Start pipeline**.
+  - CLI:
+
+```powershell
+aws codepipeline start-pipeline-execution --name "<PIPELINE_NAME>" --profile <PROFILE>
+```
+
+2. Trigger the pipeline by pushing a commit to the repository/branch connected to the pipeline (e.g., `main`):
+
+```powershell
+git commit --allow-empty -m "Trigger initial pipeline build"
+git push origin main
+```
+
+3. Manually push Docker images to ECR to bootstrap the runtime images (when CodeBuild is not yet available or you prefer to push them yourself):
+  - Login to ECR, build the image locally, tag it with the expected repository/tag, then push.
+
+Example (PowerShell):
+
+```powershell
+$region = "<AWS_REGION>"
+$account = "<AWS_ACCOUNT_ID>"
+$repo = "<ECR_REPOSITORY_NAME>"
+$uri = "$($account).dkr.ecr.$region.amazonaws.com/$repo:latest"
+
+aws ecr get-login-password --region $region | docker login --username AWS --password-stdin "$($account).dkr.ecr.$region.amazonaws.com"
+
+cd cdk\lambda\dataIngestion
+docker build -t $repo -f Dockerfile .
+docker tag $repo:latest $uri
+docker push $uri
+```
+
+Notes:
+- Verify the exact ECR repository name in the AWS Console (ECR) or CDK outputs. The repository names depend on the stack prefix and build pipeline.
+- If you manually push images, ensure names and tags match the ones the pipeline/CDK expects.
+- After the pipeline successfully completes and images are pushed, your Lambdas will use the available images and the API should function correctly.
+
+Troubleshooting:
+- Check CodePipeline and CodeBuild console logs for failure details.
+- Check ECR to verify images and tags are present.
+- If deployments fail due to permissions, ensure CodeBuild/CodePipeline roles have ECR push permissions and IAM policies required to access the repo.
 
 ## Post-Deployment
 
@@ -326,6 +380,40 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
 
 **Issue: CDK deployment fails with "Resource already exists"**
 - Solution: Check if you have existing resources with the same names. Either delete them or use a different stack prefix.
+
+**Issue: CloudFormation validation error during ResourceExistenceCheck referencing DataPipeline or CICD ARNs**
+- Symptoms: CloudFormation throws a validation error during the change set or deployment phase, related to a `ResourceExistenceCheck` for an ARN that appears to reference the `DataPipeline` or `CICD` resources. This commonly occurs on first-time deployments when the pipeline and ECR resources are created by the deployment but are referenced in IAM policy statements or other policies before they exist.
+- Quick workaround (first-time deployment):
+  1. Temporarily update the resource ARN entries in the CICD and DataPipeline stacks to use wildcard ARNs. For example:
+
+```ts
+// Before (strict/specific ARN)
+resources: [
+  "`arn:aws:ecr:${this.region}:${this.account}:repository/${repoName}`"
+]
+
+// After (temporary wildcard to avoid ResourceExistenceCheck failures)
+resources: [
+  "*"
+]
+```
+
+or for CodePipeline/CodeBuild-related ARNs:
+
+```ts
+// Before (strict)
+`arn:aws:codepipeline:${this.region}:${this.account}:${id}-DockerImagePipeline`
+
+// After (wildcard)
+`*`
+```
+
+  2. Re-run `cdk deploy --all` to complete the initial deployment. Once the pipeline completes and has created the necessary resources (ECR repos, artifacts, etc.), you may revert the wildcard ARNs to the specific ARNs and re-deploy to restore least-privilege scoping.
+  3. Trigger the pipeline (Console -> CodePipeline -> Release change) OR push a commit to the repo to allow the pipeline to create images and artifacts.
+
+- Important notes:
+  - This is a temporary workaround intended only for first-time deployments. Using wildcard ARNs reduces IAM scope and weakens security; remember to revert the changes back to specific ARNs and re-deploy after the pipeline runs successfully.
+  - Where to change: Look for `resources:` in the stack files `cdk/lib/cicd-stack.ts` and `cdk/lib/data-pipeline-stack.ts` and adjust any ARN strings used in `PolicyStatement` definitions or `addToResourcePolicy` calls.
 
 **Issue: Amplify build fails**
 - Solution: Check the build logs in Amplify console. Common causes:
