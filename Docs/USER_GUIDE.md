@@ -31,6 +31,7 @@ This is the default experience and contains: textbook catalog, Chat (Study Compa
 ### Chat (Study Companion)
 ![chat_window](./media/chat_window.png)
 - In the sidebar a user can select existing chat sessions or create a new session with the **+** button.
+- To delete a chat session, click the delete (trash) icon on a session in the sidebar; if you are the session owner, the session will be removed immediately. Administrators can delete any session via the admin dashboard. The operation is performed via the `DELETE /chat_sessions/{chat_session_id}` endpoint.
 - Type messages into the Chat input; press **Enter** to send (Shift+Enter inserts a newline).
 - Responses stream as the model generates them and may contain sources (citations) displayed below the reply.
 ![chat_response](./media/AI_response.png)

@@ -15,6 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { useMode } from "@/providers/mode";
 import { useTextbookView } from "@/providers/textbookView";
 import { Plus, MessageSquare, ExternalLink, Volume2, ChevronRight } from "lucide-react";
+import DeleteChatButton from "./DeleteChatButton";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -42,6 +43,7 @@ export default function SideBar({
     activeChatSessionId,
     setActiveChatSessionId,
     createNewChatSession,
+    refreshChatSessions,
   } = useTextbookView();
   const { settings, setSettings, voices, speak, cancel } = useSpeech();
 
@@ -131,6 +133,20 @@ export default function SideBar({
               <span className="truncate">
                 {session.name || `Chat ${chatSessions.length - index}`}
               </span>
+              {/* Delete icon */}
+              <div className="ml-auto">
+                <DeleteChatButton
+                  chatSessionId={session.id}
+                  userSessionId={session.user_session_id}
+                  onDeleted={async () => {
+                    // Refresh sessions and if currently active, unset it
+                    await refreshChatSessions();
+                    if (activeChatSessionId === session.id) {
+                      setActiveChatSessionId("");
+                    }
+                  }}
+                />
+              </div>
             </Button>
           ))}
         </div>
