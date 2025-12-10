@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
-import { AuthService } from "@/functions/authService";
+//import { AuthService } from "@/functions/authService";
 
 type DeleteChatButtonProps = {
   chatSessionId: string;
