@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-REGION = os.environ.get('REGION', 'us-east-1')
+REGION = os.environ.get('REGION', 'ca-central-1')
 GLUE_JOB_NAME = os.environ.get('GLUE_JOB_NAME')
 MAX_CONCURRENT_GLUE_JOBS = int(os.environ.get('MAX_CONCURRENT_GLUE_JOBS', '3'))
 

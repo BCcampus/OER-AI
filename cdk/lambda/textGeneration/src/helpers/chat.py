@@ -45,7 +45,7 @@ def get_bedrock_llm(
         
         # Use the provided Bedrock region or fall back to environment variable
         if bedrock_region is None:
-            bedrock_region = os.environ.get('REGION', 'us-east-1')
+            bedrock_region = os.environ.get('REGION', 'ca-central-1')
             logger.warning(f"No Bedrock region provided, using: {bedrock_region}")
         else:
             logger.info(f"Using provided Bedrock region: {bedrock_region}")

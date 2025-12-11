@@ -7,7 +7,7 @@ from datetime import datetime
 from io import StringIO
 from urllib.parse import unquote_plus
 
-REGION = os.environ.get('REGION', 'us-east-1')
+REGION = os.environ.get('REGION', 'ca-central-1')
 s3_client = boto3.client('s3', region_name=REGION)
 sqs_client = boto3.client('sqs', region_name=REGION)
 
