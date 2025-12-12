@@ -56,9 +56,9 @@ _Note: Consider your expected concurrent users and document processing volume wh
 
 ### Create GitHub Personal Access Token
 
-To deploy this solution, you will need to generate a GitHub personal access token. Please visit [here](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic) for detailed instruction to create a personal access token.
+To deploy this solution, you will need to generate a GitHub personal access token. Please visit [here](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) for detailed instruction to create a personal access token.
 
-_Note: when selecting the scopes to grant the token (step 8 of the instruction), make sure you select `repo` scope._
+_Note: Make sure to give access to only OER-AI repository. Enable Read-only for Contents, and Metadata. For webhooks and Commit statuses enable read and write permissions._
 
 **Once you create a token, please note down its value as you will use it later in the deployment process.**
 
@@ -314,8 +314,8 @@ Open a terminal in the `/cdk` directory.
 **Initialize the CDK stack** (required only if you have not deployed any resources with CDK in this region before). Please replace `<YOUR-PROFILE-NAME>` with the appropriate AWS profile used earlier.
 
 ```bash
-cdk synth --profile <YOUR-PROFILE-NAME>
-cdk bootstrap aws://<YOUR_AWS_ACCOUNT_ID>/<YOUR_ACCOUNT_REGION> --profile <YOUR-PROFILE-NAME>
+cdk synth --profile <YOUR-PROFILE-NAME> --context githubRepo=OER-AI
+cdk bootstrap aws://<YOUR_AWS_ACCOUNT_ID>/<YOUR_ACCOUNT_REGION> --profile <YOUR-PROFILE-NAME> --context githubRepo=OER-AI
 ```
 
 **Deploy CDK stack**
@@ -346,56 +346,26 @@ cdk deploy --all \
 
 **Note:** The deployment process may take 15-30 minutes to complete. You will be prompted to approve IAM changes and security group modifications during deployment.
 
-### CodePipeline & ECR image bootstrapping (fresh deployment gotchas)
+### CodePipeline & ECR Image Bootstrapping (First-Time Deployment)
+During the first-time deployment of the API stack, the deployment may fail because the required Docker images for Lambda functions have not yet been built and pushed to ECR. This happens because CodePipeline/CodeBuild is responsible for creating the ECR repositories and building the images, but these processes are not completed before the stack attempts to reference the images.
 
-When deploying the stack for the first time, CodePipeline/CodeBuild may create ECR repositories but no container images exist yet — the pipeline itself performs the build and push of Docker images required by Docker-based Lambda functions. If CodePipeline hasn't been started yet, Lambdas that reference these images may briefly report `Image not found` errors or may fail to start until images are published.
+To resolve this issue, follow one of these approaches:
 
-To resolve this, choose one of the following options:
+#### Manually Trigger the Pipeline Build (Recommended):
 
-1. Manually start the pipeline (recommended):
-  - Console: AWS Console → **CodePipeline** → select your pipeline (`<STACK-PREFIX>-pipeline`) → **Release change** or **Start pipeline**.
-  - CLI:
+- Go to the AWS Console → CodePipeline → select your pipeline `<STACK-PREFIX>-pipeline` → click `Release change` or `Start pipeline`.
+- Alternatively, use the AWS CLI to start the pipeline:
+Wait for the Pipeline to Complete and Redeploy:
 
-```powershell
-aws codepipeline start-pipeline-execution --name "<PIPELINE_NAME>" --profile <PROFILE>
-```
-
-2. Trigger the pipeline by pushing a commit to the repository/branch connected to the pipeline (e.g., `main`):
-
-```powershell
-git commit --allow-empty -m "Trigger initial pipeline build"
-git push origin main
-```
-
-3. Manually push Docker images to ECR to bootstrap the runtime images (when CodeBuild is not yet available or you prefer to push them yourself):
-  - Login to ECR, build the image locally, tag it with the expected repository/tag, then push.
-
-Example (PowerShell):
-
-```powershell
-$region = "<AWS_REGION>"
-$account = "<AWS_ACCOUNT_ID>"
-$repo = "<ECR_REPOSITORY_NAME>"
-$uri = "$($account).dkr.ecr.$region.amazonaws.com/$repo:latest"
-
-aws ecr get-login-password --region $region | docker login --username AWS --password-stdin "$($account).dkr.ecr.$region.amazonaws.com"
-
-cd cdk\lambda\dataIngestion
-docker build -t $repo -f Dockerfile .
-docker tag $repo:latest $uri
-docker push $uri
-```
-
-Notes:
-- Verify the exact ECR repository name in the AWS Console (ECR) or CDK outputs. The repository names depend on the stack prefix and build pipeline.
-- If you manually push images, ensure names and tags match the ones the pipeline/CDK expects.
-- After the pipeline successfully completes and images are pushed, your Lambdas will use the available images and the API should function correctly.
-
-Troubleshooting:
-- Check CodePipeline and CodeBuild console logs for failure details.
-- Check ECR to verify images and tags are present.
-- If deployments fail due to permissions, ensure CodeBuild/CodePipeline roles have ECR push permissions and IAM policies required to access the repo.
-
+- Allow CodePipeline to complete the build and push the required Docker images to ECR.
+Once the images are available, redeploy the API stack to ensure the Lambdas can reference the images.
+- Notes:
+  - Verify the ECR repository names and tags in the AWS Console or CDK outputs to ensure they match the expected values.
+After the pipeline successfully completes and the images are pushed, the API stack should deploy successfully, and the Lambdas will function as expected.
+- Troubleshooting:
+  - Check the CodePipeline and CodeBuild logs for any errors during the build process.
+  - Verify that the required images and tags are present in ECR.
+  - Ensure that the IAM roles for CodePipeline and CodeBuild have the necessary permissions to push images to ECR and access the repositories.
 ## Post-Deployment
 
 ### Step 1: Build AWS Amplify App
@@ -440,41 +410,7 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
 
 **Issue: CloudFormation validation error during ResourceExistenceCheck referencing DataPipeline or CICD ARNs**
 - Symptoms: CloudFormation throws a validation error during the change set or deployment phase, related to a `ResourceExistenceCheck` for an ARN that appears to reference the `DataPipeline` or `CICD` resources. This commonly occurs on first-time deployments when the pipeline and ECR resources are created by the deployment but are referenced in IAM policy statements or other policies before they exist.
-- Quick workaround (first-time deployment):
-  1. Temporarily update the resource ARN entries in the CICD and DataPipeline stacks to use wildcard ARNs. For example:
 
-```ts
-// Before (strict/specific ARN)
- resources: [
-          `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestionLambdaDockerFunction`,
-          `arn:aws:lambda:${this.region}:${this.account}:function:*-TextGenLambdaDockerFunction`,
-          `arn:aws:lambda:${this.region}:${this.account}:function:*-PracticeMaterialLambdaDockerFunction`,
-        ],
-// After (temporary wildcard to avoid ResourceExistenceCheck failures)
-resources: [
-  "*"
-]
-```
-```ts
-// Before (strict/specific ARN)
-resources: [
-                `arn:aws:glue:${this.region}:${this.account}:job/${id}-data-processing-job`,
-]
-
-// After (temporary wildcard to avoid ResourceExistenceCheck failures)
-resources: [
-  "*"
-]
-```
-
-
-
-  2. Re-run `cdk deploy --all` to complete the initial deployment. Once the pipeline completes and has created the necessary resources (ECR repos, artifacts, etc.), you may revert the wildcard ARNs to the specific ARNs and re-deploy to restore least-privilege scoping.
-  3. Trigger the pipeline (Console -> CodePipeline -> Release change) OR push a commit to the repo to allow the pipeline to create images and artifacts.
-
-- Important notes:
-  - This is a temporary workaround intended only for first-time deployments. Using wildcard ARNs reduces IAM scope and weakens security; remember to revert the changes back to specific ARNs and re-deploy after the pipeline runs successfully.
-  - Where to change: Look for `resources:` in the stack files `cdk/lib/cicd-stack.ts` and `cdk/lib/data-pipeline-stack.ts` and adjust any ARN strings used in `PolicyStatement` definitions or `addToResourcePolicy` calls.
 
 **Issue: Amplify build fails**
 - Solution: Check the build logs in Amplify console. Common causes:
@@ -513,12 +449,7 @@ To take down the deployed stack for a fresh redeployment in the future, follow t
    - Click "Continue" and then "Modify DB instance"
    - Wait for the modification to complete before proceeding
 
-2. **Delete Amplify App:**
-   - Navigate to AWS Amplify console
-   - Select your app
-   - Click "Actions" → "Delete app"
-
-3. **Delete CloudFormation Stacks:**
+2. **Delete CloudFormation Stacks:**
    Navigate to AWS CloudFormation console and delete stacks in this order:
    - `<STACK-PREFIX>-Amplify`
    - `<STACK-PREFIX>-CICD`
@@ -528,24 +459,24 @@ To take down the deployed stack for a fresh redeployment in the future, follow t
    - `<STACK-PREFIX>-Database`
    - `<STACK-PREFIX>-VpcStack`
 
-4. **Delete Secrets:**
+3. **Delete Secrets:**
    - Navigate to AWS Secrets Manager
    - Delete the following secrets:
      - `github-personal-access-token`
      - `OERSecrets`
      - Any database credentials created by the stack
 
-5. **Delete SSM Parameters:**
+4. **Delete SSM Parameters:**
    - Navigate to AWS Systems Manager → Parameter Store
    - Delete the following parameters:
      - `oer-owner-name`
      - Any other parameters created by the stack
 
-6. **Delete ECR Repositories** (if any were created):
+5. **Delete ECR Repositories** (if any were created):
    - Navigate to Amazon ECR
    - Delete repositories created by the stack
 
-7. **Verify Cleanup**:
+6. **Verify Cleanup**:
    - Check CloudWatch Logs for any remaining log groups
    - Check Lambda functions for any remaining functions
    - Check API Gateway for any remaining APIs
