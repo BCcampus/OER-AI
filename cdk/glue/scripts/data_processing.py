@@ -273,8 +273,15 @@ def extract_license_url(soup):
 
     # Fallback: look for a link that looks like a Creative Commons URL
     for a in license_block.find_all('a', href=True):
-        if 'creativecommons.org' in a['href'] or '/licenses/' in a['href']:
-            return a['href']
+        href = a['href']
+        parsed = urlparse(href)
+        host = parsed.hostname
+        # Check for creativecommons.org host if absolute URL
+        if host and (host == 'creativecommons.org' or host.endswith('.creativecommons.org')):
+            return href
+        # Allow '/licenses/' substring if relative URL or as fallback
+        if '/licenses/' in href:
+            return href
 
     return None
 
