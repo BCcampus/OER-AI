@@ -27,7 +27,10 @@ export class DatabaseStack extends Stack {
   ) {
     super(scope, id, props);
 
-    new cr.AwsCustomResource(this, `${id}-RDSServiceLinkedRoleResource`, {
+    const serviceLinkedRole = new cr.AwsCustomResource(
+      this,
+      `${id}-RDSServiceLinkedRoleResource`,
+      {
       onCreate: {
         service: "IAM",
         action: "createServiceLinkedRole",
@@ -40,7 +43,8 @@ export class DatabaseStack extends Stack {
       policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
         resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
       }),
-    });
+      }
+    );
     /**
      * Retrieve a secret from Secret Manager
      */
@@ -196,6 +200,8 @@ export class DatabaseStack extends Stack {
       securityGroups: this.dbInstance.connections.securityGroups,
       requireTLS: false,
     });
+
+    rdsProxy.node.addDependency(serviceLinkedRole);
 
     /**
      * Workaround for TargetGroupName not being set automatically
