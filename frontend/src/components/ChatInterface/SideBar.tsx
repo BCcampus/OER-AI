@@ -16,7 +16,14 @@ import { useMode } from "@/providers/mode";
 import { useTextbookView } from "@/providers/textbookView";
 import { Plus, MessageSquare, ExternalLink, Volume2, ChevronRight } from "lucide-react";
 import DeleteChatButton from "./DeleteChatButton";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useSpeech } from "@/contexts/SpeechContext";
@@ -28,13 +35,17 @@ type StudentSideBarProps = {
   textbookSourceUrl?: string;
 };
 
-export default function SideBar({
+type SidebarContentProps = StudentSideBarProps & {
+  setMobileOpen: (open: boolean) => void;
+};
+
+function SidebarContent({
   textbookTitle,
   textbookAuthor,
   textbookId,
   textbookSourceUrl,
-}: StudentSideBarProps) {
-  const { mobileOpen, setMobileOpen } = useSidebar();
+  setMobileOpen,
+}: SidebarContentProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { mode } = useMode();
@@ -46,6 +57,7 @@ export default function SideBar({
     refreshChatSessions,
   } = useTextbookView();
   const { settings, setSettings, voices, speak, cancel } = useSpeech();
+  const [audioOpen, setAudioOpen] = useState(false);
 
   const handleNewChat = async () => {
     const newSession = await createNewChatSession();
@@ -63,12 +75,9 @@ export default function SideBar({
     }
   };
 
-  const SidebarContent = () => {
-    const [audioOpen, setAudioOpen] = useState(false);
+  // No debug logs here; keep dialog state local
 
-    // No debug logs here; keep popover state local
-
-    return (
+  return (
     <>
       <Card className="py-[10px] gap-2 mb-4">
         <CardContent
@@ -158,13 +167,9 @@ export default function SideBar({
             <Volume2 className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-xs font-semibold text-muted-foreground tracking-wide">AUDIO</h3>
           </div>
-          <Popover open={audioOpen} onOpenChange={(o) => setAudioOpen(o)}>
-              <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Audio settings"
-              >
+          <Dialog open={audioOpen} onOpenChange={(o) => setAudioOpen(o)}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Audio settings">
                 <ChevronRight
                   className={cn(
                     "h-4 w-4 transition-transform duration-150",
@@ -172,32 +177,12 @@ export default function SideBar({
                   )}
                 />
               </Button>
-            </PopoverTrigger>
-              <PopoverContent
-              side="right"
-              align="start"
-              forceMount
-              onOpenAutoFocus={(e) => {
-                // Prevent auto focus of the first focusable element on mount. Keeping focus where the
-                // user clicked avoids immediate focusOutside dismissals by Radix.
-                e.preventDefault();
-              }}
-              onFocusOutside={(e: any) => {
-                try {
-                  const target = (e?.detail?.originalEvent as FocusEvent | undefined)?.relatedTarget as Element | null;
-                  // If focus is moving to the popover trigger, don't dismiss the popover.
-                  if (target && target.closest("[data-slot=popover-trigger]")) {
-                    e.preventDefault?.();
-                    return;
-                  }
-                } catch (err) {
-                  // Ignore and allow default behavior
-                }
-              }}
-              
-            >
-              <div className="text-xs font-medium mb-1">Audio settings</div>
-              <div className="px-3 py-2 space-y-2">
+            </DialogTrigger>
+            <DialogContent className="max-w-sm" aria-label="Audio settings dialog">
+              <DialogHeader>
+                <DialogTitle className="text-sm">Audio settings</DialogTitle>
+              </DialogHeader>
+              <div className="px-1 py-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Narration</Label>
                   <Switch
@@ -282,15 +267,15 @@ export default function SideBar({
                     onChange={(e) => setSettings({ volume: Number(e.target.value) })}
                   />
                 </div>
-                <div className="flex gap-2 justify-end">
-                  <Button onClick={() => speak("This is a sample of the selected voice.", { enabled: true })}>Play sample</Button>
-                  <Button variant="ghost" onClick={() => cancel()}>
-                    Stop
-                  </Button>
-                </div>
               </div>
-            </PopoverContent>
-          </Popover>
+              <DialogFooter className="flex gap-2 justify-end">
+                <Button onClick={() => speak("This is a sample of the selected voice.", { enabled: true })}>Play sample</Button>
+                <Button variant="ghost" onClick={() => cancel()}>
+                  Stop
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
       <Separator className="mb-4" />
@@ -347,13 +332,27 @@ export default function SideBar({
       )}
     </>
   );
-  };
+}
+
+export default function SideBar({
+  textbookTitle,
+  textbookAuthor,
+  textbookId,
+  textbookSourceUrl,
+}: StudentSideBarProps) {
+  const { mobileOpen, setMobileOpen } = useSidebar();
 
   return (
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:block fixed left-0 p-[10px] h-screen w-64 flex-shrink-0 border bg-muted overflow-auto px-4">
-        <SidebarContent />
+        <SidebarContent
+          textbookTitle={textbookTitle}
+          textbookAuthor={textbookAuthor}
+          textbookId={textbookId}
+          textbookSourceUrl={textbookSourceUrl}
+          setMobileOpen={setMobileOpen}
+        />
       </aside>
 
       {/* Mobile sidebar */}
@@ -377,7 +376,13 @@ export default function SideBar({
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <SidebarContent />
+          <SidebarContent
+            textbookTitle={textbookTitle}
+            textbookAuthor={textbookAuthor}
+            textbookId={textbookId}
+            textbookSourceUrl={textbookSourceUrl}
+            setMobileOpen={setMobileOpen}
+          />
         </div>
       </div>
     </>
