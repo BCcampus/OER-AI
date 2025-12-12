@@ -32,6 +32,7 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
 ```
 ├── cdk/
 │   ├── bin/
+│   ├── glue/
 │   ├── lambda/
 │   │   ├── adminAuthorizerFunction/
 │   │   ├── authorization/
@@ -39,12 +40,12 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
 │   │   ├── csvProcessor/
 │   │   ├── dataIngestion/
 │   │   ├── db_setup/
-│   │   │   ├── migrations/
-│   │   │   └── schema.dbml
+│   │   │   └── migrations/
 │   │   ├── generatePresignedURL/
 │   │   ├── h5pExport/
 │   │   ├── handlers/
 │   │   ├── jobProcessor/
+│   │   ├── mediaJobProcessor/
 │   │   ├── practiceMaterial/
 │   │   ├── publicTokenFunction/
 │   │   ├── textGeneration/
