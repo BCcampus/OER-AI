@@ -88,3 +88,26 @@ const amplifyStack = new AmplifyStack(app, `${StackPrefix}-Amplify`, apiStack, {
   githubRepo: githubRepo,
 });
 amplifyStack.addDependency(apiStack);
+
+const stackTags = {
+  Project: "OER-AI",
+  StackPrefix: StackPrefix,
+  Environment: environment || "dev",
+  ManagedBy: "CDK",
+};
+
+const stacks = [
+  vpcStack,
+  dbStack,
+  dbFlowStack,
+  dataPipelineStack,
+  cicdStack,
+  apiStack,
+  amplifyStack,
+];
+
+stacks.forEach((stack) => {
+  Object.entries(stackTags).forEach(([key, value]) => {
+    cdk.Tags.of(stack).add(key, value);
+  });
+});
