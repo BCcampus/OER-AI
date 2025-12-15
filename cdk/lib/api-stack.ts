@@ -1081,6 +1081,89 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
+    // ========================================================================
+    // ECR Image Waiter Custom Resource
+    // ========================================================================
+    // This custom resource ensures Docker images exist in ECR before
+    // the Docker-based Lambda functions are created, preventing race conditions
+
+    const ecrImageWaiterRole = new iam.Role(this, `${id}-EcrImageWaiterRole`, {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+    });
+
+    ecrImageWaiterRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "ecr:DescribeImages",
+          "ecr:DescribeRepositories",
+          "ecr:BatchGetImage",
+        ],
+        resources: [`arn:aws:ecr:${this.region}:${this.account}:repository/*`],
+      })
+    );
+
+    ecrImageWaiterRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        resources: ["arn:aws:logs:*:*:*"],
+      })
+    );
+
+    const ecrImageWaiterFunction = new lambda.Function(
+      this,
+      `${id}-EcrImageWaiter`,
+      {
+        runtime: lambda.Runtime.NODEJS_22_X,
+        code: lambda.Code.fromAsset("lambda/ecrImageWaiter"),
+        handler: "index.handler",
+        timeout: cdk.Duration.minutes(15),
+        role: ecrImageWaiterRole,
+        functionName: `${id}-EcrImageWaiter`,
+        description: "Custom resource to wait for ECR images to be available",
+      }
+    );
+
+    // Create custom resources to wait for each Docker image
+    const textGenImageWaiter = new cdk.CustomResource(
+      this,
+      "TextGenImageWaiter",
+      {
+        serviceToken: ecrImageWaiterFunction.functionArn,
+        properties: {
+          RepositoryName:
+            props.ecrRepositories["textGeneration"].repositoryName,
+          ImageTag: "latest",
+          MaxRetries: "60", // 60 retries * 30 sec = 30 minutes max wait
+          RetryDelaySeconds: "30",
+        },
+      }
+    );
+
+    const practiceMaterialImageWaiter = new cdk.CustomResource(
+      this,
+      "PracticeMaterialImageWaiter",
+      {
+        serviceToken: ecrImageWaiterFunction.functionArn,
+        properties: {
+          RepositoryName:
+            props.ecrRepositories["practiceMaterial"].repositoryName,
+          ImageTag: "latest",
+          MaxRetries: "60",
+          RetryDelaySeconds: "30",
+        },
+      }
+    );
+
+    // ========================================================================
+    // Docker-based Lambda Functions
+    // ========================================================================
+
     const textGenLambdaDockerFunc = new lambda.DockerImageFunction(
       this,
       `${id}-TextGenLambdaDockerFunction`,
@@ -1117,7 +1200,13 @@ export class ApiGatewayStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnTextGenDockerFunc.overrideLogicalId("TextGenLambdaDockerFunc");
 
+    // Add dependency to ensure image exists in ECR before Lambda is created
+    cfnTextGenDockerFunc.addDependency(
+      textGenImageWaiter.node.defaultChild as cdk.CfnResource
+    );
+
     // API Gateway permissions
+
     textGenLambdaDockerFunc.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
@@ -1542,21 +1631,17 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     // Connect Lambda
-    const connectFunction = new lambda.Function(
-      this,
-      `${id}-ConnectFunction`,
-      {
-        functionName: `${id}-ConnectFunction`,
-        runtime: lambda.Runtime.NODEJS_22_X,
-        handler: "connect.handler",
-        code: lambda.Code.fromAsset("lambda/websocket"),
-        timeout: cdk.Duration.seconds(30),
-        environment: {
-          JWT_SECRET: jwtSecret.secretArn,
-        },
-        layers: [jwt],
-      }
-    );
+    const connectFunction = new lambda.Function(this, `${id}-ConnectFunction`, {
+      functionName: `${id}-ConnectFunction`,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: "connect.handler",
+      code: lambda.Code.fromAsset("lambda/websocket"),
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        JWT_SECRET: jwtSecret.secretArn,
+      },
+      layers: [jwt],
+    });
 
     // Disconnect Lambda
     const disconnectFunction = new lambda.Function(
@@ -1738,7 +1823,13 @@ export class ApiGatewayStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnPracticeMaterialDocker.overrideLogicalId("PracticeMaterialDockerFunc");
 
+    // Add dependency to ensure image exists in ECR before Lambda is created
+    cfnPracticeMaterialDocker.addDependency(
+      practiceMaterialImageWaiter.node.defaultChild as cdk.CfnResource
+    );
+
     // IAM: Secrets, SSM, Bedrock
+
     practiceMaterialDockerFunc.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
