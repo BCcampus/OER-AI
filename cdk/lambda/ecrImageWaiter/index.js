@@ -1,6 +1,8 @@
 const { ECRClient, DescribeImagesCommand } = require("@aws-sdk/client-ecr");
+const { CodeBuildClient, StartBuildCommand } = require("@aws-sdk/client-codebuild");
 
 const ecr = new ECRClient({});
+const codebuild = new CodeBuildClient({});
 
 /**
  * Custom resource handler that waits for a Docker image to exist in ECR
@@ -15,6 +17,8 @@ exports.handler = async (event, context) => {
     ImageTag,
     MaxRetries = "60",
     RetryDelaySeconds = "30",
+    CodeBuildProjectName,
+    TriggerBuildOnMissing = "false",
   } = ResourceProperties;
 
   const maxRetries = parseInt(MaxRetries);
@@ -47,6 +51,8 @@ exports.handler = async (event, context) => {
     let retries = 0;
     let imageExists = false;
 
+    let buildTriggered = false;
+
     while (retries < maxRetries && !imageExists) {
       try {
         const command = new DescribeImagesCommand({
@@ -77,6 +83,28 @@ exports.handler = async (event, context) => {
               retryDelay / 1000
             } seconds...`
           );
+
+          // On first miss, optionally trigger a CodeBuild build
+          if (
+            !buildTriggered &&
+            TriggerBuildOnMissing.toString().toLowerCase() === "true" &&
+            CodeBuildProjectName
+          ) {
+            try {
+              console.log(
+                `Starting CodeBuild project ${CodeBuildProjectName} to build the image...`
+              );
+              await codebuild.send(
+                new StartBuildCommand({ projectName: CodeBuildProjectName })
+              );
+              buildTriggered = true;
+            } catch (cbError) {
+              console.error(
+                `Failed to start CodeBuild project ${CodeBuildProjectName}:`,
+                cbError
+              );
+            }
+          }
 
           if (retries < maxRetries) {
             await sleep(retryDelay);

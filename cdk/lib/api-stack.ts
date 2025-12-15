@@ -27,6 +27,7 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
+  codeBuildProjects?: { [key: string]: codebuild.IProject };
   csvBucket: s3.Bucket;
 }
 
@@ -1103,6 +1104,23 @@ export class ApiGatewayStack extends cdk.Stack {
       })
     );
 
+    // Allow triggering CodeBuild projects when images are missing
+    if (props.codeBuildProjects) {
+      const projectArns = Object.values(props.codeBuildProjects).map(
+        (proj) => proj.projectArn
+      );
+
+      if (projectArns.length > 0) {
+        ecrImageWaiterRole.addToPolicy(
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ["codebuild:StartBuild"],
+            resources: projectArns,
+          })
+        );
+      }
+    }
+
     ecrImageWaiterRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -1126,6 +1144,7 @@ export class ApiGatewayStack extends cdk.Stack {
         role: ecrImageWaiterRole,
         functionName: `${id}-EcrImageWaiter`,
         description: "Custom resource to wait for ECR images to be available",
+        logRetention: logs.RetentionDays.ONE_WEEK,
       }
     );
 
@@ -1141,6 +1160,9 @@ export class ApiGatewayStack extends cdk.Stack {
           ImageTag: "latest",
           MaxRetries: "60", // 60 retries * 30 sec = 30 minutes max wait
           RetryDelaySeconds: "30",
+          CodeBuildProjectName:
+            props.codeBuildProjects?.["textGeneration"]?.projectName,
+          TriggerBuildOnMissing: "true",
         },
       }
     );
@@ -1156,6 +1178,9 @@ export class ApiGatewayStack extends cdk.Stack {
           ImageTag: "latest",
           MaxRetries: "60",
           RetryDelaySeconds: "30",
+          CodeBuildProjectName:
+            props.codeBuildProjects?.["practiceMaterial"]?.projectName,
+          TriggerBuildOnMissing: "true",
         },
       }
     );
