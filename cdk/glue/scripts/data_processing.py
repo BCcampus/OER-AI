@@ -1425,6 +1425,8 @@ def main():
         book_id = metadata.get('bookId', 'unknown')
         
         logger.info(f"Combined metadata: {json.dumps(combined_metadata, indent=2, default=str)}")
+        textbook_id_param = sqs_data.get('textbook_id', None)
+        is_reingest = sqs_data.get('is_reingest', False)
         
         # Insert textbook into database
         logger.info("Inserting textbook into database...")
@@ -1435,11 +1437,28 @@ def main():
             conn = connect_to_db()
             cursor = conn.cursor()
             
-            query = """
-            INSERT INTO textbooks (title, authors, license, source_url, publisher, publish_date, summary, language, level, metadata, textbook_logo_url)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id;
-            """
+            if is_reingest:
+                query = """
+                UPDATE textbooks SET
+                title = %s,
+                authors = %s,
+                license = %s,
+                source_url = %s,
+                publisher = %s,
+                publish_date = %s,
+                summary = %s,
+                language = %s,
+                level = %s,
+                metadata = %s,
+                textbook_logo_url = %s
+                WHERE id = %s;
+                """
+            else:
+                query = """
+                INSERT INTO textbooks (title, authors, license, source_url, publisher, publish_date, summary, language, level, metadata, textbook_logo_url)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id;
+                """
             
             # Parse authors from metadata
             authors_str = combined_metadata.get('author', combined_metadata.get('Author', combined_metadata.get('Authors', '')))
@@ -1478,9 +1497,43 @@ def main():
             )
             
             cursor.execute(query, params)
-            textbook_id = cursor.fetchone()[0]
-            conn.commit()
-            job_id = create_job(textbook_id, total_sections=0)
+            if is_reingest:
+                conn.commit()
+                textbook_id = textbook_id_param
+                try:
+                    if is_reingest:
+                        # For re-ingestion, job should already exist
+                        conn = connect_to_db()
+                        cursor = conn.cursor()
+                        try:
+                            cursor.execute("""
+                                UPDATE jobs
+                                SET status = 'running',
+                                    started_at = NOW(),
+                                    updated_at = NOW()
+                                WHERE textbook_id = %s  
+                                AND status = 'pending'
+                                RETURNING id
+                            """, (textbook_id,))
+                            result = cursor.fetchone()
+                            if result:
+                                job_id = result[0]
+                                logger.info(f"Updated existing job {job_id} to running status")
+                            else:
+                                # Fallback: create new job if not found
+                                job_id = create_job(textbook_id, total_sections=0)
+                            conn.commit()
+                        finally:
+                            cursor.close()
+                else:
+                    # Normal ingestion: create new job
+                    job_id = create_job(textbook_id, total_sections=0)
+            except Exception as e:
+                logger.error(f"Error managing job: {e}")
+            else:
+                textbook_id = cursor.fetchone()[0]
+                conn.commit()
+                job_id = create_job(textbook_id, total_sections=0)
             
             logger.info(f"Successfully inserted textbook with ID: {textbook_id}")
             

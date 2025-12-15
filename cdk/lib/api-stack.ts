@@ -24,10 +24,12 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
   csvBucket: s3.Bucket;
+  textbookIngestionQueue: sqs.Queue;
 }
 
 export class ApiGatewayStack extends cdk.Stack {
@@ -1471,6 +1473,7 @@ export class ApiGatewayStack extends cdk.Stack {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           DAILY_TOKEN_LIMIT: dailyTokenLimitParameter.parameterName,
+          TEXTBOOK_QUEUE_URL: props.textbookIngestionQueue.queueUrl,
         },
         functionName: `${id}-adminFunction`,
         memorySize: 512,
@@ -1495,6 +1498,15 @@ export class ApiGatewayStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: ["ssm:GetParameter", "ssm:PutParameter"],
         resources: [dailyTokenLimitParameter.parameterArn],
+      })
+    );
+
+    // Grant SQS send message permissions for re-ingestion
+    lambdaAdminFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["sqs:SendMessage"],
+        resources: [props.textbookIngestionQueue.queueArn],
       })
     );
 
@@ -1542,21 +1554,17 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     // Connect Lambda
-    const connectFunction = new lambda.Function(
-      this,
-      `${id}-ConnectFunction`,
-      {
-        functionName: `${id}-ConnectFunction`,
-        runtime: lambda.Runtime.NODEJS_22_X,
-        handler: "connect.handler",
-        code: lambda.Code.fromAsset("lambda/websocket"),
-        timeout: cdk.Duration.seconds(30),
-        environment: {
-          JWT_SECRET: jwtSecret.secretArn,
-        },
-        layers: [jwt],
-      }
-    );
+    const connectFunction = new lambda.Function(this, `${id}-ConnectFunction`, {
+      functionName: `${id}-ConnectFunction`,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: "connect.handler",
+      code: lambda.Code.fromAsset("lambda/websocket"),
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        JWT_SECRET: jwtSecret.secretArn,
+      },
+      layers: [jwt],
+    });
 
     // Disconnect Lambda
     const disconnectFunction = new lambda.Function(
