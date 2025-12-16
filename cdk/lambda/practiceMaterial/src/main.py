@@ -8,7 +8,7 @@ from aws_lambda_powertools.utilities.streaming import StreamingResponse
 
 from helpers.vectorstore import get_textbook_retriever
 from langchain_aws import BedrockEmbeddings, ChatBedrock
-
+# practice material grading handler
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
