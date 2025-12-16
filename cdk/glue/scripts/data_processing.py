@@ -1482,55 +1482,77 @@ def main():
                 'bookId': book_id
             }
             
-            params = (
-                combined_metadata.get('Title', 'Unknown Title'),
-                authors,
-                book_info.get('license_url'),
-                start_url,
-                combined_metadata.get('Publisher'),
-                pub_date,
-                book_info.get('description'),
-                'English',
-                combined_metadata.get('Primary Subject'),
-                json.dumps(additional_metadata),
-                book_info.get('logo_url', "")
-            )
+            if is_reingest:
+                # For UPDATE: need textbook_id as last parameter
+                params = (
+                    combined_metadata.get('Title', 'Unknown Title'),
+                    authors,
+                    book_info.get('license_url'),
+                    start_url,
+                    combined_metadata.get('Publisher'),
+                    pub_date,
+                    book_info.get('description'),
+                    'English',
+                    combined_metadata.get('Primary Subject'),
+                    json.dumps(additional_metadata),
+                    book_info.get('logo_url', ""),
+                    textbook_id_param  # ← Add this for WHERE id = %s
+                )
+            else:
+                # For INSERT: keep 11 values
+                params = (
+                    combined_metadata.get('Title', 'Unknown Title'),
+                    authors,
+                    book_info.get('license_url'),
+                    start_url,
+                    combined_metadata.get('Publisher'),
+                    pub_date,
+                    book_info.get('description'),
+                    'English',
+                    combined_metadata.get('Primary Subject'),
+                    json.dumps(additional_metadata),
+                    book_info.get('logo_url', "")
+                )
             
             cursor.execute(query, params)
             if is_reingest:
                 conn.commit()
                 textbook_id = textbook_id_param
+                
+                # Job management for re-ingestion
                 try:
-                    if is_reingest:
-                        # For re-ingestion, job should already exist
-                        conn = connect_to_db()
-                        cursor = conn.cursor()
-                        try:
-                            cursor.execute("""
-                                UPDATE jobs
-                                SET status = 'running',
-                                    started_at = NOW(),
-                                    updated_at = NOW()
-                                WHERE textbook_id = %s  
-                                AND status = 'pending'
-                                RETURNING id
-                            """, (textbook_id,))
-                            result = cursor.fetchone()
-                            if result:
-                                job_id = result[0]
-                                logger.info(f"Updated existing job {job_id} to running status")
-                            else:
-                                # Fallback: create new job if not found
-                                job_id = create_job(textbook_id, total_sections=0)
-                            conn.commit()
-                        finally:
-                            cursor.close()
-                else:
-                    # Normal ingestion: create new job
-                    job_id = create_job(textbook_id, total_sections=0)
-            except Exception as e:
-                logger.error(f"Error managing job: {e}")
+                    job_conn = connect_to_db()
+                    job_cursor = job_conn.cursor()
+                    try:
+                        job_cursor.execute("""
+                            UPDATE jobs
+                            SET status = 'running',
+                                started_at = NOW(),
+                                updated_at = NOW()
+                            WHERE textbook_id = %s  
+                            AND status = 'pending'
+                            RETURNING id
+                        """, (textbook_id,))
+                        result = job_cursor.fetchone()
+                        if result:
+                            job_id = result[0]
+                            logger.info(f"Updated existing job {job_id} to running status")
+                        else:
+                            # Fallback: create new job if not found
+                            job_id = create_job(textbook_id, total_sections=0)
+                        job_conn.commit()
+                    finally:
+                        job_cursor.close()
+                        job_conn.close()
+                except Exception as e:
+                    logger.error(f"Error managing job for re-ingestion: {e}")
+                    # Fallback: try to create new job
+                    try:
+                        job_id = create_job(textbook_id, total_sections=0)
+                    except:
+                        job_id = None
             else:
+                # Normal ingestion
                 textbook_id = cursor.fetchone()[0]
                 conn.commit()
                 job_id = create_job(textbook_id, total_sections=0)

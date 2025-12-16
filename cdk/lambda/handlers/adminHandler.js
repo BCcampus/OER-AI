@@ -379,11 +379,17 @@ exports.handler = async (event) => {
         const textbookData = textbookToReIngest[0];
 
         try {
-          // Step 1: Delete all sections for this textbook (CASCADE will handle media_items)
+          // Step 1: Delete all sections for this textbook (CASCADE will handle media_items linked to sections)
           await sqlConnection`
             DELETE FROM sections WHERE textbook_id = ${reIngestTextbookId}
           `;
           console.log(`Deleted sections for textbook ${reIngestTextbookId}`);
+
+          // Step 1b: Delete all media items linked directly to this textbook (not through sections)
+          await sqlConnection`
+            DELETE FROM media_items WHERE textbook_id = ${reIngestTextbookId}
+          `;
+          console.log(`Deleted media items for textbook ${reIngestTextbookId}`);
 
           // Step 2: Delete langchain embeddings collection
           try {
