@@ -23,6 +23,7 @@ interface CICDStackProps extends cdk.StackProps {
 
 export class CICDStack extends cdk.Stack {
   public readonly ecrRepositories: { [key: string]: ecr.Repository } = {};
+  public readonly buildProjects: { [key: string]: codebuild.IProject } = {};
 
   constructor(scope: Construct, id: string, props: CICDStackProps) {
     super(scope, id, props);
@@ -245,6 +246,8 @@ export class CICDStack extends cdk.Stack {
           }),
         }
       );
+
+      this.buildProjects[lambda.name] = buildProject;
 
       // Grant permissions to push to ECR
       ecrRepo.grantPullPush(buildProject);

@@ -78,6 +78,7 @@ const apiStack = new ApiGatewayStack(
   {
     env,
     ecrRepositories: cicdStack.ecrRepositories,
+    codeBuildProjects: cicdStack.buildProjects,
     csvBucket: dataPipelineStack.csvBucket,
     textbookIngestionQueue: dataPipelineStack.textbookIngestionQueue,
   }
