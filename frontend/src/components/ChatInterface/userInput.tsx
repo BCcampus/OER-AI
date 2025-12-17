@@ -136,7 +136,19 @@ export function AiChatInput({
       return;
 
     const cursorPosition = saveCursorPosition();
-    const text = getTextContent();
+    let text = getTextContent();
+
+    // Enforce 1000 character limit
+    if (text.length > 1000) {
+      text = text.slice(0, 1000);
+      // Update the content to reflect the truncation
+      isUpdatingRef.current = true;
+      const highlighted = highlightText(text);
+      editableRef.current.innerHTML = highlighted || "";
+      // Restore cursor at the end
+      restoreCursorPosition(Math.min(cursorPosition, 1000));
+      isUpdatingRef.current = false;
+    }
 
     // Call parent's onChange with plain text
     onChange(text);
@@ -240,6 +252,18 @@ export function AiChatInput({
       >
         <Send className="h-4 w-4" />
       </Button>
+
+      {/* Character counter */}
+      <div
+        className={cn(
+          "absolute bottom-1 left-3 text-xs transition-colors",
+          value.length > 950
+            ? "text-destructive font-medium"
+            : "text-muted-foreground"
+        )}
+      >
+        {value.length}/1000
+      </div>
     </div>
   );
 }

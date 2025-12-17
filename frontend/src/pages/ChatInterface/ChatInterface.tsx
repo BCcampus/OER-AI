@@ -34,7 +34,9 @@ export default function AIChatPage() {
   );
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [initialMessageLoadTime, setInitialMessageLoadTime] = useState<number | null>(null);
+  const [initialMessageLoadTime, setInitialMessageLoadTime] = useState<
+    number | null
+  >(null);
   const [seeMore, setSeeMore] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
 
@@ -122,7 +124,10 @@ export default function AIChatPage() {
   const [webSocketToken, setWebSocketToken] = useState<string | null>(null);
 
   // WebSocket configuration
-  const baseWebSocketUrl = useMemo(() => import.meta.env.VITE_WEBSOCKET_URL, []);
+  const baseWebSocketUrl = useMemo(
+    () => import.meta.env.VITE_WEBSOCKET_URL,
+    []
+  );
   const webSocketUrl = useMemo(() => {
     if (!baseWebSocketUrl || !webSocketToken) {
       return null;
@@ -153,7 +158,9 @@ export default function AIChatPage() {
   useEffect(() => {
     const apiEndpoint = import.meta.env.VITE_API_ENDPOINT;
     if (!apiEndpoint) {
-      console.warn("[WebSocket] API endpoint not configured; skipping token fetch");
+      console.warn(
+        "[WebSocket] API endpoint not configured; skipping token fetch"
+      );
       return;
     }
 
@@ -170,7 +177,9 @@ export default function AIChatPage() {
       try {
         const response = await fetch(`${apiEndpoint}/user/publicToken`);
         if (!response.ok) {
-          throw new Error(`Token request failed with status ${response.status}`);
+          throw new Error(
+            `Token request failed with status ${response.status}`
+          );
         }
 
         const { token } = await response.json();
@@ -200,7 +209,10 @@ export default function AIChatPage() {
         window.clearTimeout(refreshTimeoutId);
       }
 
-      refreshTimeoutId = window.setTimeout(fetchToken, delay) as unknown as number;
+      refreshTimeoutId = window.setTimeout(
+        fetchToken,
+        delay
+      ) as unknown as number;
     }
 
     fetchToken();
@@ -1170,14 +1182,12 @@ export default function AIChatPage() {
                 placeholder={`Ask anything about ${textbookTitle}`}
                 onSend={sendMessage}
               />
-              {/* Connection Status Indicator (for debugging) */}
-              {import.meta.env.DEV && (
-                <div className="text-xs text-muted-foreground mt-1">
-                  WebSocket: {connectionState} {isConnected && "🟢"}{" "}
-                  {connectionState === "connecting" && "🟡"}{" "}
-                  {connectionState === "disconnected" && "🔴"}
-                </div>
-              )}
+              <div className="text-xs text-muted-foreground mt-1">
+                {/* Connection Status Indicator (for debugging) */}
+                WebSocket: {connectionState} {isConnected && "🟢"}{" "}
+                {connectionState === "connecting" && "🟡"}{" "}
+                {connectionState === "disconnected" && "🔴"}
+              </div>
             </div>
 
             {/* Prompt Suggestions */}
