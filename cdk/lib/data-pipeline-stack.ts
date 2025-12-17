@@ -388,6 +388,10 @@ export class DataPipelineStack extends cdk.Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName(
           "service-role/AWSLambdaBasicExecutionRole"
         ),
+        // Required for VPC access - allows Lambda to create network interfaces
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "service-role/AWSLambdaVPCAccessExecutionRole"
+        ),
       ],
       inlinePolicies: {
         SQSAccess: new iam.PolicyDocument({
@@ -418,25 +422,46 @@ export class DataPipelineStack extends cdk.Stack {
             }),
           ],
         }),
+        SecretsManagerAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["secretsmanager:GetSecretValue"],
+              resources: [
+                `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
+              ],
+            }),
+          ],
+        }),
       },
     });
 
+    // Import psycopg2 layer from layers directory
+    const psycopg2Layer = new lambda.LayerVersion(this, `${id}-Psycopg2Layer`, {
+      code: lambda.Code.fromAsset("layers/psycopg2.zip"),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      description: "Psycopg2 layer for database connectivity",
+    });
     this.jobProcessorLambda = new lambda.Function(
       this,
       `${id}-JobProcessorLambda`,
       {
         functionName: `${id}-job-processor`,
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         handler: "main.lambda_handler",
         code: lambda.Code.fromAsset("lambda/jobProcessor"),
         timeout: Duration.minutes(4),
         memorySize: 512,
         role: jobProcessorRole,
+        layers: [psycopg2Layer],
+        vpc: vpcStack.vpc,
         environment: {
           DATA_PROCESSING_BUCKET: this.csvBucket.bucketName,
           REGION: this.region,
           MAX_CONCURRENT_GLUE_JOBS: "3",
           GLUE_JOB_NAME: dataProcessingJob.name!,
+          SM_DB_CREDENTIALS: databaseStack.secretPathUser.secretArn,
+          RDS_PROXY_ENDPOINT: databaseStack.rdsProxyEndpoint,
         },
       }
     );

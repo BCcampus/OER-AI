@@ -56,6 +56,7 @@ try:
         'sqs_message_id',
         'sqs_message_body',
         'trigger_timestamp',
+        'job_id',  # Job ID created by jobProcessor Lambda
         'region_name',
         'GLUE_BUCKET',
         'rds_secret',
@@ -72,6 +73,7 @@ try:
     DB_SECRET_NAME = args['rds_secret']
     RDS_PROXY_ENDPOINT = args['rds_proxy_endpoint']
     EMBEDDING_MODEL_ID = args['embedding_model_id']
+    JOB_ID = args['job_id']  # Job ID from jobProcessor
         
     # Parse the SQS message body
     sqs_data = json.loads(args['sqs_message_body'])
@@ -82,6 +84,7 @@ try:
     print(f"Start URL: {start_url}")
     print(f"Book Title: {metadata.get('title', 'Unknown')}")
     print(f"Book ID: {metadata.get('bookId', 'Unknown')}")
+    print(f"Job ID: {JOB_ID}")
     
 except Exception as e:
     print(f"Error parsing arguments: {e}")
@@ -1518,44 +1521,38 @@ def main():
             if is_reingest:
                 conn.commit()
                 textbook_id = textbook_id_param
-                
-                # Job management for re-ingestion
-                try:
-                    job_conn = connect_to_db()
-                    job_cursor = job_conn.cursor()
-                    try:
-                        job_cursor.execute("""
-                            UPDATE jobs
-                            SET status = 'running',
-                                started_at = NOW(),
-                                updated_at = NOW()
-                            WHERE textbook_id = %s  
-                            AND status = 'pending'
-                            RETURNING id
-                        """, (textbook_id,))
-                        result = job_cursor.fetchone()
-                        if result:
-                            job_id = result[0]
-                            logger.info(f"Updated existing job {job_id} to running status")
-                        else:
-                            # Fallback: create new job if not found
-                            job_id = create_job(textbook_id, total_sections=0)
-                        job_conn.commit()
-                    finally:
-                        job_cursor.close()
-                        job_conn.close()
-                except Exception as e:
-                    logger.error(f"Error managing job for re-ingestion: {e}")
-                    # Fallback: try to create new job
-                    try:
-                        job_id = create_job(textbook_id, total_sections=0)
-                    except:
-                        job_id = None
+                # Use job_id from jobProcessor Lambda (passed via args)
+                job_id = JOB_ID
+                logger.info(f"Using existing job record: {job_id} for re-ingestion")
             else:
                 # Normal ingestion
                 textbook_id = cursor.fetchone()[0]
                 conn.commit()
-                job_id = create_job(textbook_id, total_sections=0)
+                # Use job_id from jobProcessor Lambda (passed via args)
+                job_id = JOB_ID
+                logger.info(f"Using existing job record: {job_id} for new ingestion")
+            
+            # Update job record with textbook_id now that we have it
+            try:
+                job_conn = connect_to_db()
+                job_cursor = job_conn.cursor()
+                try:
+                    job_cursor.execute("""
+                        UPDATE jobs
+                        SET textbook_id = %s,
+                            status = 'running',
+                            started_at = NOW(),
+                            updated_at = NOW()
+                        WHERE id = %s
+                    """, (textbook_id, job_id))
+                    job_conn.commit()
+                    logger.info(f"Updated job {job_id} with textbook_id: {textbook_id}")
+                finally:
+                    job_cursor.close()
+                    job_conn.close()
+            except Exception as e:
+                logger.error(f"Error updating job with textbook_id: {e}")
+                # Continue anyway - job record will be completed later
             
             logger.info(f"Successfully inserted textbook with ID: {textbook_id}")
             
