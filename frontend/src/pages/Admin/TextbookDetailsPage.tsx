@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/card";
 import { AuthService } from "@/functions/authService";
 import MetricCard from "@/components/Admin/MetricCard";
+import CloudWatchLogsViewer from "@/components/Admin/CloudWatchLogsViewer";
 
 type TextbookDetails = {
   id: string;
@@ -629,6 +630,7 @@ export default function TextbookDetailsPage() {
                       Usage statistics and engagement metrics.
                     </p>
                   </div>
+
                   <div className="flex items-center bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
                     <Button
                       variant={timeRange === "3m" ? "secondary" : "ghost"}
@@ -1178,7 +1180,8 @@ export default function TextbookDetailsPage() {
                     tooltip="Total number of images extracted from the textbook content and indexed."
                   />
                 </div>
-
+                {/* CloudWatch Logs Viewer */}
+                {id && <CloudWatchLogsViewer textbookId={id} />}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
                     Associated Media (
