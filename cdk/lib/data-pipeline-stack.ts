@@ -126,7 +126,7 @@ export class DataPipelineStack extends cdk.Stack {
       this,
       `${id}-CsvProcessorFunction`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/csvProcessor"),
         handler: "index.handler",
         timeout: Duration.minutes(10),
@@ -523,7 +523,7 @@ export class DataPipelineStack extends cdk.Stack {
       `${id}-MediaJobProcessorLambda`,
       {
         functionName: `${id}-media-job-processor`,
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         handler: "main.lambda_handler",
         code: lambda.Code.fromAsset("lambda/mediaJobProcessor"),
         timeout: Duration.minutes(4),

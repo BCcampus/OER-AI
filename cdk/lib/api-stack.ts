@@ -92,7 +92,7 @@ export class ApiGatewayStack extends cdk.Stack {
      */
     const psycopgLayer = new lambda.LayerVersion(this, "psycopgLambdaLayer", {
       code: lambda.Code.fromAsset("./layers/psycopg2.zip"),
-      compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
       description: "Lambda layer containing the psycopg2 Python library",
     });
 
@@ -848,7 +848,7 @@ export class ApiGatewayStack extends cdk.Stack {
       `${id}-PresignedUrlFunction`,
       {
         functionName: `${id}-presigned-url-generator`,
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/generatePresignedURL"),
         handler: "generatePreSignedURL.lambda_handler",
         timeout: Duration.seconds(30),
@@ -1518,7 +1518,7 @@ export class ApiGatewayStack extends cdk.Stack {
       this,
       `${id}-h5pExportFunction`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/h5pExport"),
         handler: "index.handler",
         timeout: Duration.seconds(30),
