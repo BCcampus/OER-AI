@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.11
+FROM public.ecr.aws/lambda/python:3.12
 
 # Update glib2 to address CVE-2025-13601 (heap-based buffer overflow in g_escape_uri_string)
 # This runs before other installations to ensure all subsequent packages use the patched version 
