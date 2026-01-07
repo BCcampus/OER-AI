@@ -11,9 +11,9 @@ import { Button } from "@/components/ui/button";
 import { AuthService } from "@/functions/authService";
 
 type AdminSidebarProps = {
-  activeView: "dashboard" | "analytics" | "ai-settings" | "faqs-prompts";
+  activeView: "dashboard" | "analytics" | "ai-settings" | "faqs-prompts" | "media" | "content-sections";
   onViewChange: (
-    view: "dashboard" | "analytics" | "ai-settings" | "faqs-prompts"
+    view: "dashboard" | "analytics" | "ai-settings" | "faqs-prompts" | "media" | "content-sections"
   ) => void;
 };
 
@@ -54,11 +54,10 @@ export default function AdminSidebar({
         </div>
         <Button
           variant={activeView === "dashboard" ? "secondary" : "ghost"}
-          className={`w-full justify-start ${
-            activeView === "dashboard"
-              ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-              : "text-gray-600"
-          }`}
+          className={`w-full justify-start ${activeView === "dashboard"
+            ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+            : "text-gray-600"
+            }`}
           onClick={() => onViewChange("dashboard")}
         >
           <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -66,11 +65,10 @@ export default function AdminSidebar({
         </Button>
         <Button
           variant={activeView === "analytics" ? "secondary" : "ghost"}
-          className={`w-full justify-start ${
-            activeView === "analytics"
-              ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-              : "text-gray-600"
-          }`}
+          className={`w-full justify-start ${activeView === "analytics"
+            ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+            : "text-gray-600"
+            }`}
           onClick={() => onViewChange("analytics")}
         >
           <BarChart3 className="mr-2 h-4 w-4" />
@@ -78,11 +76,10 @@ export default function AdminSidebar({
         </Button>
         <Button
           variant={activeView === "ai-settings" ? "secondary" : "ghost"}
-          className={`w-full justify-start ${
-            activeView === "ai-settings"
-              ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-              : "text-gray-600"
-          }`}
+          className={`w-full justify-start ${activeView === "ai-settings"
+            ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+            : "text-gray-600"
+            }`}
           onClick={() => onViewChange("ai-settings")}
         >
           <Bot className="mr-2 h-4 w-4" />
@@ -90,11 +87,10 @@ export default function AdminSidebar({
         </Button>
         <Button
           variant={activeView === "faqs-prompts" ? "secondary" : "ghost"}
-          className={`w-full justify-start ${
-            activeView === "faqs-prompts"
-              ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-              : "text-gray-600"
-          }`}
+          className={`w-full justify-start ${activeView === "faqs-prompts"
+            ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+            : "text-gray-600"
+            }`}
           onClick={() => onViewChange("faqs-prompts")}
         >
           <MessageSquare className="mr-2 h-4 w-4" />

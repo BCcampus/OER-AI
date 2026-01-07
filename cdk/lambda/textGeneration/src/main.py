@@ -21,7 +21,7 @@ TABLE_NAME_PARAM = os.environ.get("TABLE_NAME_PARAM")
 DAILY_TOKEN_LIMIT_PARAM = os.environ.get("DAILY_TOKEN_LIMIT_PARAM")
 COLD_START_METRIC = os.environ.get("COLD_START_METRIC", "false").lower() == "true"
 FORCE_COLD_START_TEST = os.environ.get("FORCE_COLD_START_TEST", "false").lower() == "true"
-
+#comment to invoke code pipeline
 # Lazy-loaded globals - initialized only when needed
 _secrets_manager = None
 _ssm_client = None

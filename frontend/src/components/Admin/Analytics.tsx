@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -88,7 +88,7 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export default function Analytics() {
-  const [timeRange, setTimeRange] = useState("3m");
+  const [timeRange, setTimeRange] = useState("90d");
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData>({
     timeSeries: [],
     chatSessionsByTextbook: [],
@@ -109,18 +109,16 @@ export default function Analytics() {
       const session = await AuthService.getAuthSession(true);
       const token = session.tokens.idToken;
 
+      // Build analytics URL with timeRange parameter
+      let analyticsUrl = `${import.meta.env.VITE_API_ENDPOINT}/admin/analytics?timeRange=${timeRange}`;
+
       const [generalResponse, practiceResponse] = await Promise.all([
-        fetch(
-          `${
-            import.meta.env.VITE_API_ENDPOINT
-          }/admin/analytics?timeRange=${timeRange}`,
-          {
-            headers: {
-              Authorization: token,
-              "Content-Type": "application/json",
-            },
-          }
-        ),
+        fetch(analyticsUrl, {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }),
         fetch(`${import.meta.env.VITE_API_ENDPOINT}/admin/analytics/practice`, {
           headers: {
             Authorization: token,
@@ -171,31 +169,30 @@ export default function Analytics() {
             Deep dive into student engagement and content usage.
           </p>
         </div>
-        <div className="flex items-center bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
-          <Button
-            variant={timeRange === "3m" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setTimeRange("3m")}
-            className="text-xs h-8"
-          >
-            Last 3 months
-          </Button>
-          <Button
-            variant={timeRange === "30d" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setTimeRange("30d")}
-            className="text-xs h-8"
-          >
-            Last 30 Days
-          </Button>
-          <Button
-            variant={timeRange === "7d" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setTimeRange("7d")}
-            className="text-xs h-8"
-          >
-            Last 7 Days
-          </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-white rounded-lg border border-gray-200 p-1 px-3 shadow-sm gap-2">
+            <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Last
+            </span>
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              className="h-8 w-20 text-center"
+              defaultValue={90}
+              onChange={(e) => {
+                const val = parseInt(e.target.value);
+                if (!isNaN(val) && val > 0) {
+                  // Cap at 365, min 1
+                  const days = Math.min(Math.max(1, val), 365);
+                  setTimeRange(`${days}d`);
+                }
+              }}
+            />
+            <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Days
+            </span>
+          </div>
         </div>
       </div>
 

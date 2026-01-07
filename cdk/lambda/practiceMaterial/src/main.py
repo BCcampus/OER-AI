@@ -5,7 +5,7 @@ import logging
 import boto3
 import psycopg2
 from typing import Any, Dict
-
+# import helpers
 from helpers.vectorstore import get_textbook_retriever
 from langchain_aws import BedrockEmbeddings, ChatBedrock
 # practice material grading handler
