@@ -5799,8 +5799,8 @@ paths:
       summary: Generate AI practice materials (MCQs, Flashcards, or Short Answer) for a textbook
       operationId: generate_practice_materials
       #TODO: figure out why this breaks the API Gateway deployment
-      # security:
-      #   - userAuthorizer: []
+      security:
+        - userAuthorizer: []
       parameters:
         - name: textbook_id
           in: path
@@ -5990,9 +5990,8 @@ paths:
         - User
       summary: Grade a short answer response using AI
       operationId: grade_short_answer
-      #TODO: figure out why this breaks the API Gateway deployment
-      # security:
-      #   - userAuthorizer: []
+      security:
+        - userAuthorizer: []
       parameters:
         - name: textbook_id
           in: path

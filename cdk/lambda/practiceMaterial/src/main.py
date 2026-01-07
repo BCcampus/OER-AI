@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import logging
 import boto3
 import psycopg2
@@ -19,6 +20,7 @@ RDS_PROXY_ENDPOINT = os.environ.get("RDS_PROXY_ENDPOINT", "")
 PRACTICE_MATERIAL_MODEL_PARAM = os.environ.get("PRACTICE_MATERIAL_MODEL_PARAM")
 EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
 BEDROCK_REGION_PARAM = os.environ.get("BEDROCK_REGION_PARAM")
+COLD_START_METRIC = os.environ.get("COLD_START_METRIC", "false").lower() == "true"
 
 # AWS Clients
 secrets_manager = boto3.client("secretsmanager", region_name=REGION)
@@ -32,6 +34,36 @@ _embedding_model_id: str | None = None
 _bedrock_region: str | None = None
 _embeddings = None
 _llm = None
+_is_cold_start = True
+
+
+def emit_cold_start_metrics(function_name: str, execution_ms: int, cold_start_ms: int | None) -> None:
+    """Emit embedded CloudWatch metrics for cold start and execution time."""
+    if not COLD_START_METRIC:
+        return
+
+    payload = {
+        "_aws": {
+            "Timestamp": int(time.time() * 1000),
+            "CloudWatchMetrics": [
+                {
+                    "Namespace": "Lambda/ColdStart",
+                    "Dimensions": [["FunctionName"]],
+                    "Metrics": [
+                        {"Name": "ColdStart", "Unit": "Count"},
+                        {"Name": "ColdStartDurationMs", "Unit": "Milliseconds"},
+                        {"Name": "ExecutionTimeMs", "Unit": "Milliseconds"},
+                    ],
+                }
+            ],
+        },
+        "FunctionName": function_name,
+        "ColdStart": 1 if cold_start_ms is not None else 0,
+        "ColdStartDurationMs": cold_start_ms or 0,
+        "ExecutionTimeMs": execution_ms,
+    }
+
+    print(json.dumps(payload))
 
 
 def get_secret_dict(name: str) -> Dict[str, Any]:
@@ -539,6 +571,18 @@ def build_grading_prompt(
 
 
 def handler(event, context):
+    global _is_cold_start
+    start_time = time.time()
+    cold_start_duration_ms = None
+    if _is_cold_start:
+        cold_start_duration_ms = int((time.time() - start_time) * 1000)
+        _is_cold_start = False
+
+    def finalize(resp):
+        execution_ms = int((time.time() - start_time) * 1000)
+        emit_cold_start_metrics(context.function_name, execution_ms, cold_start_duration_ms)
+        return resp
+
     logger.info("PracticeMaterial Lambda (Docker) invoked")
 
     # Validate path and parse inputs
@@ -546,24 +590,24 @@ def handler(event, context):
     
     # Handle grading endpoint
     if resource == "POST /textbooks/{textbook_id}/practice_materials/grade":
-        return handle_grading(event, context)
+        return finalize(handle_grading(event, context))
     
     # Handle generation endpoint
     if resource != "POST /textbooks/{textbook_id}/practice_materials":
-        return {"statusCode": 404, "body": json.dumps({"error": f"Unsupported route: {resource}"})}
+        return finalize({"statusCode": 404, "body": json.dumps({"error": f"Unsupported route: {resource}"})})
 
     path_params = event.get("pathParameters") or {}
     textbook_id = path_params.get("textbook_id")
     if not textbook_id:
-        return {"statusCode": 400, "body": json.dumps({"error": "Textbook ID is required"})}
+        return finalize({"statusCode": 400, "body": json.dumps({"error": "Textbook ID is required"})})
 
     body = parse_body(event.get("body"))
     topic = str(body.get("topic", "")).strip()
     if not topic:
-        return {"statusCode": 400, "body": json.dumps({"error": "'topic' is required"})}
+        return finalize({"statusCode": 400, "body": json.dumps({"error": "'topic' is required"})})
     material_type = str(body.get("material_type", "mcq")).lower().strip()
     if material_type not in ["mcq", "flashcard", "short_answer"]:
-        return {"statusCode": 400, "body": json.dumps({"error": "material_type must be 'mcq', 'flashcard', or 'short_answer'"})}
+        return finalize({"statusCode": 400, "body": json.dumps({"error": "material_type must be 'mcq', 'flashcard', or 'short_answer'"})})
 
     difficulty = str(body.get("difficulty", "intermediate")).lower().strip()
     
@@ -601,11 +645,11 @@ def handler(event, context):
             embeddings=_embeddings,
         )
         if retriever is None:
-            return {
+            return finalize({
                 "statusCode": 404,
                 "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
                 "body": json.dumps({"error": f"No embeddings found for textbook {textbook_id}"}),
-            }
+            })
 
         # Pull a few relevant chunks as context
         docs = retriever.invoke(topic)
@@ -659,7 +703,7 @@ def handler(event, context):
                 logger.error(f"Retry also failed: {e2}")
                 logger.error(f"Raw retry output (first 2000 chars): {output_text2[:2000]}")
                 # Return the raw LLM responses to client for debugging
-                return {
+                return finalize({
                     "statusCode": 500,
                     "headers": {
                         "Content-Type": "application/json",
@@ -674,7 +718,7 @@ def handler(event, context):
                         "rawRetryResponse": output_text2,
                         "debug": "Check the raw responses above to see what the LLM generated"
                     })
-                }
+                })
 
         # Add sources to response 
         response_data = {
@@ -724,7 +768,7 @@ def handler(event, context):
         except Exception as analytics_error:
             logger.warning(f"Analytics tracking failed but continuing: {analytics_error}")
         
-        return {
+        return finalize({
             "statusCode": 200,
             "headers": {
                 "Content-Type": "application/json",
@@ -733,10 +777,10 @@ def handler(event, context):
                 "Access-Control-Allow-Methods": "*",
             },
             "body": json.dumps(response_data)
-        }
+        })
     except Exception as e:
         logger.exception("Error generating practice materials")
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+        return finalize({"statusCode": 500, "body": json.dumps({"error": str(e)})})
 
 
 def handle_grading(event, context):
@@ -846,4 +890,3 @@ def handle_grading(event, context):
             },
             "body": json.dumps({"error": f"Error grading answer: {str(e)}"}),
         }
-

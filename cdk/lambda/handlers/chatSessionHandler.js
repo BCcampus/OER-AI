@@ -182,21 +182,41 @@ exports.handler = async (event) => {
         
       case "GET /chat_sessions/{chat_session_id}/interactions":
         const chatSessionId = event.pathParameters?.chat_session_id;
+        const requestingUserSessionId = event.queryStringParameters?.user_session_id;
+        
         if (!chatSessionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "chat_session_id is required" });
           break;
         }
         
-        // Verify chat session exists and get textbook_id
+        // SECURITY: Verify chat session exists and validate ownership
         const chatSessionResult = await sqlConnection`
-          SELECT id, textbook_id FROM chat_sessions WHERE id = ${chatSessionId}
+          SELECT id, textbook_id, user_session_id FROM chat_sessions WHERE id = ${chatSessionId}
         `;
         
         if (chatSessionResult.length === 0) {
           response.statusCode = 404;
           response.body = JSON.stringify({ error: "Chat session not found" });
           break;
+        }
+        
+        // SECURITY: Validate session ownership if user_session_id is provided
+        if (requestingUserSessionId) {
+          const sessionOwner = chatSessionResult[0].user_session_id;
+          if (sessionOwner !== requestingUserSessionId) {
+            logger.warn(`Unauthorized access attempt: user_session ${requestingUserSessionId} tried to access chat_session ${chatSessionId} owned by ${sessionOwner}`);
+            response.statusCode = 403;
+            response.body = JSON.stringify({ 
+              error: "Access denied",
+              message: "You do not have permission to access this chat session"
+            });
+            break;
+          }
+          logger.info(`Session ownership validated for chat_session ${chatSessionId}`);
+        } else {
+          // Log warning if no user_session_id provided (backward compatibility)
+          logger.warn(`No user_session_id provided for chat_session ${chatSessionId} - ownership not validated`);
         }
         
         // Fetch all interactions for this chat session

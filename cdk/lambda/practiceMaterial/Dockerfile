@@ -1,24 +1,50 @@
-FROM public.ecr.aws/lambda/python:3.12
+FROM public.ecr.aws/lambda/python:3.11 as builder
 
-# Update glib2 to address CVE-2025-13601 (heap-based buffer overflow in g_escape_uri_string)
-# This runs before other installations to ensure all subsequent packages use the patched version 
-RUN yum update -y glib2 \
-    && yum clean all
+# Update glib2 for CVE-2025-13601 mitigation (dnf in AL2023, fallback to yum)
+RUN if command -v dnf >/dev/null 2>&1; then \
+            dnf -y upgrade glib2 && dnf clean all; \
+        else \
+            yum -y update glib2 && yum clean all; \
+        fi
 
-# Install system dependencies needed by psycopg and pgvector
-RUN yum -y install postgresql-devel gcc libpq gcc-c++ \
-    && yum clean all \
-    && rm -rf /var/cache/yum
+# Install build-time dependencies (kept out of final image)
+RUN if command -v dnf >/dev/null 2>&1; then \
+            dnf -y install postgresql-devel gcc libpq gcc-c++ && dnf clean all; \
+        else \
+            yum -y install postgresql-devel gcc libpq gcc-c++ && yum clean all; \
+        fi \
+        && rm -rf /var/cache/dnf /var/cache/yum
 
-# Set working directory
+# Install Python deps into a portable path
+WORKDIR /opt
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --target /opt/python -r requirements.txt
+
+FROM public.ecr.aws/lambda/python:3.11
+
+# Update glib2 in the runtime image as well
+RUN if command -v dnf >/dev/null 2>&1; then \
+            dnf -y upgrade glib2 && dnf clean all; \
+        else \
+            yum -y update glib2 && yum clean all; \
+        fi
+
 WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Copy and install Python deps
-COPY requirements.txt ${LAMBDA_TASK_ROOT}
-RUN pip install --no-cache-dir -r requirements.txt
+# Bring in only the built site-packages (no build tools)
+COPY --from=builder /opt/python ${LAMBDA_RUNTIME_DIR}
 
-# Copy source
+# Copy source code
 COPY src/ ${LAMBDA_TASK_ROOT}
 
-# Entrypoint
+# Set environment variables for Python optimization
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONOPTIMIZE=2
+
+# Validate the installation and clean up any remaining artifacts
+RUN python -c "import sys; print(f'Python version: {sys.version}')" && \
+    find ${LAMBDA_TASK_ROOT} -name "*.pyc" -delete && \
+    find ${LAMBDA_TASK_ROOT} -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
 CMD [ "main.handler" ]

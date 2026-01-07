@@ -251,6 +251,92 @@ exports.handler = async (event) => {
         });
         break;
 
+      // GET /admin/textbooks/{textbook_id}/media - Get all media items for a textbook
+      case "GET /admin/textbooks/{textbook_id}/media":
+        const mediaTextbookId = event.pathParameters?.textbook_id;
+        if (!mediaTextbookId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Textbook ID is required" });
+          break;
+        }
+
+        // Query media items for the textbook
+        const mediaItems = await sqlConnection`
+          SELECT 
+            id,
+            media_type as type,
+            uri as url,
+            description,
+            page_start,
+            page_end,
+            mime_type,
+            size_bytes,
+            created_at
+          FROM media_items
+          WHERE textbook_id = ${mediaTextbookId}
+          ORDER BY page_start ASC, created_at ASC
+        `;
+
+        response.statusCode = 200;
+        response.body = JSON.stringify({
+          textbook_id: mediaTextbookId,
+          media_items: mediaItems.map(item => ({
+            id: item.id,
+            type: item.type,
+            url: item.url,
+            description: item.description,
+            page_start: item.page_start,
+            page_end: item.page_end,
+            mime_type: item.mime_type,
+            size_bytes: item.size_bytes,
+            created_at: item.created_at,
+          })),
+          total: mediaItems.length,
+        });
+        break;
+
+      // GET /admin/textbooks/{textbook_id}/sections - Get all sections for a textbook
+      case "GET /admin/textbooks/{textbook_id}/sections":
+        const sectionsTextbookId = event.pathParameters?.textbook_id;
+        if (!sectionsTextbookId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Textbook ID is required" });
+          break;
+        }
+
+        // Query sections for the textbook
+        const sections = await sqlConnection`
+          SELECT 
+            id,
+            parent_section_id,
+            title,
+            order_index as order,
+            page_start,
+            page_end,
+            summary as content_preview,
+            created_at
+          FROM sections
+          WHERE textbook_id = ${sectionsTextbookId}
+          ORDER BY order_index ASC, created_at ASC
+        `;
+
+        response.statusCode = 200;
+        response.body = JSON.stringify({
+          textbook_id: sectionsTextbookId,
+          sections: sections.map(section => ({
+            id: section.id,
+            parent_section_id: section.parent_section_id,
+            title: section.title,
+            order: section.order,
+            page_start: section.page_start,
+            page_end: section.page_end,
+            content_preview: section.content_preview,
+            created_at: section.created_at,
+          })),
+          total: sections.length,
+        });
+        break;
+
       // PUT /admin/textbooks/{textbook_id} - Update textbook (including status)
       case "PUT /admin/textbooks/{textbook_id}":
         const updateTextbookId = event.pathParameters?.textbook_id;
@@ -724,8 +810,24 @@ exports.handler = async (event) => {
 
         // Calculate date range based on timeRange parameter
         let analyticsDaysBack = 90; // default 3 months
-        if (analyticsTimeRange === "30d") analyticsDaysBack = 30;
-        if (analyticsTimeRange === "7d") analyticsDaysBack = 7;
+
+        // Parse timeRange format (e.g., "30d", "6m", "1y")
+        const timeRangeMatch = analyticsTimeRange.match(/^(\d+)([dmy])$/);
+        if (timeRangeMatch) {
+          const value = parseInt(timeRangeMatch[1], 10);
+          const unit = timeRangeMatch[2];
+
+          if (unit === "d") {
+            analyticsDaysBack = value;
+          } else if (unit === "m") {
+            analyticsDaysBack = value * 30; // Approximate month as 30 days
+          } else if (unit === "y") {
+            analyticsDaysBack = value * 365;
+          }
+        }
+
+        // Cap at 365 days and ensure at least 1 day
+        analyticsDaysBack = Math.min(Math.max(1, analyticsDaysBack), 365);
 
         const analyticsStartDate = new Date();
         analyticsStartDate.setDate(
@@ -1390,22 +1492,78 @@ exports.handler = async (event) => {
 
       // GET /admin/analytics - Get analytics data
       case "GET /admin/analytics":
-        const timeRange = event.queryStringParameters?.timeRange || "3m";
+        let startDate, endDate;
+        
+        // Support custom date ranges
+        if (event.queryStringParameters?.startDate && event.queryStringParameters?.endDate) {
+          // Use custom date range
+          startDate = new Date(event.queryStringParameters.startDate);
+          endDate = new Date(event.queryStringParameters.endDate);
+          
+          // Validate dates
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+              error: "Invalid date format. Use ISO 8601 format (YYYY-MM-DD)" 
+            });
+            break;
+          }
+          
+          if (endDate < startDate) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+              error: "End date must be after start date" 
+            });
+            break;
+          }
+          
+          // Validate max 1 year range
+          const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+          if (daysDiff > 365) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+              error: "Date range cannot exceed 1 year (365 days)" 
+            });
+            break;
+          }
+          
+          console.log(`Using custom date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+        } else {
+          // Use preset timeRange
+          const timeRange = event.queryStringParameters?.timeRange || "3m";
+          let daysBack = 90; // default 3 months
 
-        // Calculate date range based on timeRange parameter
-        let daysBack = 90; // default 3 months
-        if (timeRange === "30d") daysBack = 30;
-        if (timeRange === "7d") daysBack = 7;
+          // Parse timeRange format (e.g., "30d", "6m", "1y")
+          const timeRangeMatch = timeRange.match(/^(\d+)([dmy])$/);
+          if (timeRangeMatch) {
+            const value = parseInt(timeRangeMatch[1], 10);
+            const unit = timeRangeMatch[2];
 
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - daysBack);
+            if (unit === "d") {
+              daysBack = value;
+            } else if (unit === "m") {
+              daysBack = value * 30;
+            } else if (unit === "y") {
+              daysBack = value * 365;
+            }
+          }
+
+          // Cap at 365 days and ensure at least 1 day
+          daysBack = Math.min(Math.max(1, daysBack), 365);
+          
+          endDate = new Date();
+          startDate = new Date();
+          startDate.setDate(startDate.getDate() - daysBack);
+          
+          console.log(`Using preset time range: ${timeRange} (${daysBack} days)`);
+        }
 
         // Get time series data for users and questions
         const timeSeriesData = await sqlConnection`
           WITH date_series AS (
             SELECT generate_series(
               DATE_TRUNC('day', ${startDate.toISOString()}::timestamp),
-              DATE_TRUNC('day', NOW()),
+              DATE_TRUNC('day', ${endDate.toISOString()}::timestamp),
               '1 day'::interval
             )::date AS date
           ),

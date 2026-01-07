@@ -1,17 +1,8 @@
 import os
 import json
-import boto3
+import time
 import logging
-import psycopg2
-from langchain_aws import BedrockEmbeddings
-from helpers.vectorstore import get_textbook_retriever
-from helpers.chat import get_bedrock_llm, get_response_streaming, get_response, update_session_name
-from helpers.faq_cache import check_faq_cache, cache_faq, stream_cached_response
-from helpers.token_limit_helper import (
-    get_user_session_from_chat_session,
-    check_and_update_token_limit,
-    get_session_token_status
-)
+import threading
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -28,95 +19,225 @@ GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
 WEBSOCKET_API_ENDPOINT = os.environ.get("WEBSOCKET_API_ENDPOINT", "")
 TABLE_NAME_PARAM = os.environ.get("TABLE_NAME_PARAM")
 DAILY_TOKEN_LIMIT_PARAM = os.environ.get("DAILY_TOKEN_LIMIT_PARAM")
-# AWS Clients
-secrets_manager = boto3.client("secretsmanager", region_name=REGION)
-ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
+COLD_START_METRIC = os.environ.get("COLD_START_METRIC", "false").lower() == "true"
+FORCE_COLD_START_TEST = os.environ.get("FORCE_COLD_START_TEST", "false").lower() == "true"
 
-connection = None
-db_secret = None
+# Lazy-loaded globals - initialized only when needed
+_secrets_manager = None
+_ssm_client = None
+_bedrock_runtime = None
+_db_connection_pool = None
+_pool_lock = threading.Lock()
+_db_secret = None
+_embeddings = None
+_is_cold_start = True
+_startup_ts = time.time()
+
+# Pre-loaded configuration - loaded at container startup
 BEDROCK_LLM_ID = None
 EMBEDDING_MODEL_ID = None
 BEDROCK_REGION = None
 GUARDRAIL_ID = None
-embeddings = None
+
+# Pre-load critical configuration during container startup (outside handler)
+try:
+    logger.info("Pre-loading critical configuration...")
+    import boto3
+    
+    _ssm_client = boto3.client("ssm", region_name=REGION)
+    _secrets_manager = boto3.client("secretsmanager", region_name=REGION)
+    
+    # Pre-fetch SSM parameters
+    if BEDROCK_LLM_PARAM:
+        BEDROCK_LLM_ID = _ssm_client.get_parameter(Name=BEDROCK_LLM_PARAM, WithDecryption=True)["Parameter"]["Value"]
+        logger.info(f"Pre-loaded BEDROCK_LLM_ID: {BEDROCK_LLM_ID}")
+    
+    if EMBEDDING_MODEL_PARAM:
+        EMBEDDING_MODEL_ID = _ssm_client.get_parameter(Name=EMBEDDING_MODEL_PARAM, WithDecryption=True)["Parameter"]["Value"]
+        logger.info(f"Pre-loaded EMBEDDING_MODEL_ID: {EMBEDDING_MODEL_ID}")
+    
+    if BEDROCK_REGION_PARAM:
+        BEDROCK_REGION = _ssm_client.get_parameter(Name=BEDROCK_REGION_PARAM, WithDecryption=True)["Parameter"]["Value"]
+        logger.info(f"Pre-loaded BEDROCK_REGION: {BEDROCK_REGION}")
+    else:
+        BEDROCK_REGION = REGION
+        logger.info(f"Using deployment region as BEDROCK_REGION: {BEDROCK_REGION}")
+    
+    if GUARDRAIL_ID_PARAM:
+        GUARDRAIL_ID = _ssm_client.get_parameter(Name=GUARDRAIL_ID_PARAM, WithDecryption=True)["Parameter"]["Value"]
+        logger.info(f"Pre-loaded GUARDRAIL_ID")
+    
+    logger.info(f"Pre-loading completed in {time.time() - _startup_ts:.2f}s")
+except Exception as e:
+    logger.warning(f"Pre-loading failed (will load on-demand): {e}")
+
+
+def get_secrets_manager():
+    """Lazy-load secrets manager client"""
+    global _secrets_manager
+    if _secrets_manager is None:
+        import boto3
+        _secrets_manager = boto3.client("secretsmanager", region_name=REGION)
+    return _secrets_manager
+
+
+def get_ssm_client():
+    """Lazy-load SSM client"""
+    global _ssm_client
+    if _ssm_client is None:
+        import boto3
+        _ssm_client = boto3.client("ssm", region_name=REGION)
+    return _ssm_client
+
+
+def get_bedrock_runtime():
+    """Lazy-load Bedrock runtime client"""
+    global _bedrock_runtime
+    if _bedrock_runtime is None:
+        import boto3
+        _bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
+    return _bedrock_runtime
+
+
+def get_embeddings():
+    """Lazy-load embeddings model"""
+    global _embeddings
+    if _embeddings is None:
+        from langchain_aws import BedrockEmbeddings
+        bedrock_runtime = get_bedrock_runtime()
+        _embeddings = BedrockEmbeddings(
+            model_id=EMBEDDING_MODEL_ID,
+            client=bedrock_runtime,
+            region_name='us-east-1',
+            model_kwargs={"input_type": "search_document"}
+        )
+        logger.info(f"Initialized embeddings with model: {EMBEDDING_MODEL_ID}")
+    return _embeddings
+
+
+def emit_cold_start_metrics(function_name: str, execution_ms: int, cold_start_ms: int | None) -> None:
+    """Emit embedded CloudWatch metrics for cold start and execution time."""
+    if not COLD_START_METRIC:
+        return
+
+    metrics_payload = {
+        "_aws": {
+            "Timestamp": int(time.time() * 1000),
+            "CloudWatchMetrics": [
+                {
+                    "Namespace": "Lambda/ColdStart",
+                    "Dimensions": [["FunctionName"]],
+                    "Metrics": [
+                        {"Name": "ColdStart", "Unit": "Count"},
+                        {"Name": "ColdStartDurationMs", "Unit": "Milliseconds"},
+                        {"Name": "ExecutionTimeMs", "Unit": "Milliseconds"},
+                    ],
+                }
+            ],
+        },
+        "FunctionName": function_name,
+        "ColdStart": 1 if cold_start_ms is not None else 0,
+        "ColdStartDurationMs": cold_start_ms or 0,
+        "ExecutionTimeMs": execution_ms,
+    }
+
+    print(json.dumps(metrics_payload))
+
 
 def get_secret(secret_name, expect_json=True):
-    global db_secret
-    if db_secret is None:
+    """Get secret from Secrets Manager with caching"""
+    global _db_secret
+    if _db_secret is None:
         try:
+            secrets_manager = get_secrets_manager()
             response = secrets_manager.get_secret_value(SecretId=secret_name)["SecretString"]
-            db_secret = json.loads(response) if expect_json else response
+            _db_secret = json.loads(response) if expect_json else response
         except Exception as e:
             logger.error(f"Error fetching secret: {e}")
             raise
-    return db_secret
+    return _db_secret
+
 
 def get_parameter(param_name, cached_var):
+    """Get parameter from SSM Parameter Store"""
     if cached_var is None and param_name:
         try:
-            response = ssm_client.get_parameter(Name=param_name, WithDecryption=True)
+            ssm = get_ssm_client()
+            response = ssm.get_parameter(Name=param_name, WithDecryption=True)
             cached_var = response["Parameter"]["Value"]
         except Exception as e:
             logger.error(f"Error fetching parameter {param_name}: {e}")
             raise
     return cached_var
 
-def initialize_constants():
-    global BEDROCK_LLM_ID, EMBEDDING_MODEL_ID, BEDROCK_REGION, GUARDRAIL_ID, embeddings
-    BEDROCK_LLM_ID = get_parameter(BEDROCK_LLM_PARAM, BEDROCK_LLM_ID)
-    EMBEDDING_MODEL_ID = get_parameter(EMBEDDING_MODEL_PARAM, EMBEDDING_MODEL_ID)
-    
-    # Get Bedrock region parameter
-    if BEDROCK_REGION_PARAM:
-        BEDROCK_REGION = get_parameter(BEDROCK_REGION_PARAM, BEDROCK_REGION)
-        logger.info(f"Using Bedrock region: {BEDROCK_REGION}")
-    else:
-        BEDROCK_REGION = REGION
-        logger.info(f"BEDROCK_REGION_PARAM not configured, using deployment region: {BEDROCK_REGION}")
-    
-    # Handle guardrail ID parameter - it might not be configured
-    if GUARDRAIL_ID_PARAM:
-        GUARDRAIL_ID = get_parameter(GUARDRAIL_ID_PARAM, GUARDRAIL_ID)
-    else:
-        GUARDRAIL_ID = None
-        logger.info("GUARDRAIL_ID_PARAM not configured, guardrails will be disabled")
 
-    if embeddings is None:
-        # Use the deployment region for embeddings (they should be in the same region as the deployment)
-        embeddings = BedrockEmbeddings(
-            model_id=EMBEDDING_MODEL_ID,
-            client=bedrock_runtime,
-            region_name='us-east-1',
-            model_kwargs = {"input_type": "search_document"}
-        )
+def initialize_constants():
+    """Initialize constants - now mostly a no-op since we pre-load at startup"""
+    # Constants are already pre-loaded at module level
+    # This function is kept for compatibility but does nothing now
+    if BEDROCK_LLM_ID is None:
+        logger.warning("BEDROCK_LLM_ID not pre-loaded, this should not happen")
+    pass
+
+
+def get_db_connection_pool():
+    """Get or create database connection pool with thread-safe singleton pattern"""
+    global _db_connection_pool
+    
+    if _db_connection_pool is None:
+        with _pool_lock:
+            # Double-check locking pattern
+            if _db_connection_pool is None:
+                import psycopg2.pool
+                try:
+                    secret = get_secret(DB_SECRET_NAME)
+                    _db_connection_pool = psycopg2.pool.ThreadedConnectionPool(
+                        minconn=1,
+                        maxconn=5,
+                        host=RDS_PROXY_ENDPOINT,
+                        database=secret["dbname"],
+                        user=secret["username"],
+                        password=secret["password"],
+                        port=int(secret["port"])
+                    )
+                    logger.info("Database connection pool created")
+                except Exception as e:
+                    logger.error(f"Failed to create connection pool: {e}")
+                    raise
+    
+    return _db_connection_pool
+
 
 def get_db_credentials():
     """Get database credentials from Secrets Manager"""
     try:
-        response = secrets_manager.get_secret_value(SecretId=DB_SECRET_NAME)["SecretString"]
-        return json.loads(response)
+        return get_secret(DB_SECRET_NAME)
     except Exception as e:
         logger.error(f"Error fetching DB credentials: {e}")
         raise
 
+
 def connect_to_db():
-    global connection
-    if connection is None or connection.closed:
+    """Get a database connection from the pool"""
+    try:
+        pool = get_db_connection_pool()
+        connection = pool.getconn()
+        logger.info("Got database connection from pool")
+        return connection
+    except Exception as e:
+        logger.error(f"Failed to get database connection: {e}")
+        raise
+
+
+def return_db_connection(connection):
+    """Return a database connection to the pool"""
+    if _db_connection_pool and connection:
         try:
-            secret = get_secret(DB_SECRET_NAME)
-            connection = psycopg2.connect(
-                dbname=secret["dbname"],
-                user=secret["username"],
-                password=secret["password"],
-                host=RDS_PROXY_ENDPOINT,
-                port=int(secret["port"])
-            )
-            logger.info("Connected to the database!")
+            _db_connection_pool.putconn(connection)
+            logger.debug("Returned database connection to pool")
         except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-            raise
-    return connection
+            logger.error(f"Error returning connection to pool: {e}")
+
 
 def estimate_token_count(text: str) -> int:
     """
@@ -136,13 +257,14 @@ def estimate_token_count(text: str) -> int:
     return int(word_count * 1.3)
 
 
-
-
 # This function is now a wrapper for the helper function in chat.py
 def process_query_streaming(query, textbook_id, retriever, chat_session_id, websocket_endpoint, connection_id, connection=None):
     """
     Process a query using streaming response via WebSocket
     """
+    # Lazy import
+    from helpers.chat import get_bedrock_llm, get_response_streaming
+    
     logger.info(f"Processing streaming query with LLM model ID: '{BEDROCK_LLM_ID}'")
     
     try:
@@ -169,6 +291,7 @@ def process_query_streaming(query, textbook_id, retriever, chat_session_id, webs
         logger.error(f"Error in process_query_streaming: {str(e)}", exc_info=True)
         # Send error message via WebSocket
         try:
+            import boto3
             apigatewaymanagementapi = boto3.client('apigatewaymanagementapi', endpoint_url=websocket_endpoint)
             apigatewaymanagementapi.post_to_connection(
                 ConnectionId=connection_id,
@@ -185,6 +308,7 @@ def process_query_streaming(query, textbook_id, retriever, chat_session_id, webs
             "sources_used": []
         }
 
+
 def process_query(query, textbook_id, retriever, chat_session_id, connection=None):
     """
     Process a query using the chat helper function
@@ -198,6 +322,9 @@ def process_query(query, textbook_id, retriever, chat_session_id, connection=Non
     Returns:
         Response dictionary with answer and sources used
     """
+    # Lazy import
+    from helpers.chat import get_bedrock_llm, get_response
+    
     # Log the model ID being used
     logger.info(f"Processing query with LLM model ID: '{BEDROCK_LLM_ID}'")
     logger.info(f"Environment variables: REGION={REGION}, RDS_PROXY_ENDPOINT={RDS_PROXY_ENDPOINT}")
@@ -250,6 +377,26 @@ def handler(event, context):
     
     Supports both regular API calls and WebSocket streaming
     """
+    global _is_cold_start
+    start_time = time.time()
+    cold_start_duration_ms = None
+    if FORCE_COLD_START_TEST:
+        _is_cold_start = True  # force a cold path on every invocation for testing
+    if _is_cold_start:
+        # Use module import timestamp for real cold starts; fall back to handler start for forced tests
+        baseline = _startup_ts if not FORCE_COLD_START_TEST else start_time
+        cold_start_duration_ms = int((time.time() - baseline) * 1000)
+        logger.info(f"⚡ COLD START detected: {cold_start_duration_ms}ms since container start")
+        _is_cold_start = False
+    else:
+        logger.info("♻️ WARM START")
+
+    def finalize(resp):
+        execution_ms = int((time.time() - start_time) * 1000)
+        emit_cold_start_metrics(context.function_name, execution_ms, cold_start_duration_ms)
+        logger.info(f"Total execution time: {execution_ms}ms")
+        return resp
+
     logger.info("Starting textbook question answering Lambda")
     logger.info(f"AWS Region: {REGION}")
     logger.info(f"Lambda function ARN: {context.invoked_function_arn}")
@@ -277,27 +424,65 @@ def handler(event, context):
         logger.info(f"✅ Initialized constants - LLM: {BEDROCK_LLM_ID}, Embeddings: {EMBEDDING_MODEL_ID}, Bedrock Region: {BEDROCK_REGION}")
     except Exception as e:
         logger.error(f"❌ Failed to initialize constants: {e}")
-        return {
+        return finalize({
             'statusCode': 500,
             'body': json.dumps(f'Configuration error: {str(e)}')
-        }
+        })
     
     # Validate required parameters
     if not textbook_id:
-        return {
+        return finalize({
             "statusCode": 400,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Missing textbook_id parameter"})
-        }
+        })
     
     if not question:
-        return {
+        return finalize({
             "statusCode": 400,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "No question provided in the query field"})
-        }
+        })
+    
+    connection = None
     
     try:
+        # Lazy import of helper modules
+        from helpers.vectorstore import get_textbook_retriever
+        from helpers.faq_cache import check_faq_cache, cache_faq, stream_cached_response
+        from helpers.token_limit_helper import (
+            get_user_session_from_chat_session,
+            check_and_update_token_limit,
+            get_session_token_status
+        )
+        from helpers.chat import update_session_name
+        # SECURITY: Import session security helpers
+        from helpers.session_security import (
+            validate_session_ownership,
+            sanitize_session_id,
+            validate_uuid_format
+        )
+
+        # SECURITY: Validate and sanitize chat_session_id if provided
+        if chat_session_id:
+            try:
+                chat_session_id = sanitize_session_id(chat_session_id)
+                logger.info(f"Session ID validated: {chat_session_id[:8]}...")
+            except ValueError as e:
+                logger.error(f"Invalid session ID: {e}")
+                return finalize({
+                    "statusCode": 400,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({
+                        "error": "Invalid session ID format",
+                        "message": str(e)
+                    })
+                })
+
+
+        # Lazy-load SSM client once for token limit checks
+        ssm_client = get_ssm_client()
+        
         # Get database credentials for vectorstore
         db_creds = get_db_credentials()
         vectorstore_config = {
@@ -307,6 +492,9 @@ def handler(event, context):
             "host": RDS_PROXY_ENDPOINT,
             "port": db_creds["port"]
         }
+        
+        # Get embeddings (lazy-loaded)
+        embeddings = get_embeddings()
         
         # Get retriever for the textbook
         try:
@@ -319,7 +507,7 @@ def handler(event, context):
             
             if retriever is None:
                 logger.warning(f"No retriever available for textbook {textbook_id}")
-                return {
+                return finalize({
                     "statusCode": 404,
                     "headers": {
                         "Content-Type": "application/json",
@@ -328,10 +516,10 @@ def handler(event, context):
                         "Access-Control-Allow-Methods": "*"
                     },
                     "body": json.dumps({"error": f"No embeddings found for textbook {textbook_id}"})
-                }
+                })
         except Exception as retriever_error:
             logger.error(f"Error initializing retriever: {str(retriever_error)}", exc_info=True)
-            return {
+            return finalize({
                 "statusCode": 500,
                 "headers": {
                     "Content-Type": "application/json",
@@ -340,9 +528,9 @@ def handler(event, context):
                     "Access-Control-Allow-Methods": "*"
                 },
                 "body": json.dumps({"error": f"Failed to initialize retriever: {str(retriever_error)}"})
-            }
+            })
         
-        # Connect to database for custom prompts and logging
+        # Get database connection from pool
         connection = connect_to_db()
         
         # Pre-check: Verify user hasn't exceeded daily token limit before processing
@@ -395,7 +583,7 @@ def handler(event, context):
                                 logger.error(f"Failed to send token limit error via WebSocket: {ws_error}")
                         
                         # Return 429 Too Many Requests
-                        return {
+                        return finalize({
                             "statusCode": 429,
                             "headers": {
                                 "Content-Type": "application/json",
@@ -414,7 +602,7 @@ def handler(event, context):
                                     "reset_time": reset_time
                                 }
                             })
-                        }
+                        })
                     
                     # Log current status
                     if daily_limit != float('inf'):
@@ -599,9 +787,10 @@ def handler(event, context):
             connection.rollback()
             logger.error(f"Error logging question: {db_error}")
         finally:
-            # Always close the connection when done
+            # Return connection to pool instead of closing
             if connection:
-                connection.close()
+                return_db_connection(connection)
+                connection = None
         
         # Return successful response
         response_body = {
@@ -617,7 +806,7 @@ def handler(event, context):
             if "cache_similarity" in response_data:
                 response_body["cache_similarity"] = response_data["cache_similarity"]
         
-        return {
+        return finalize({
             "statusCode": 200,
             "headers": {
                 "Content-Type": "application/json",
@@ -626,11 +815,14 @@ def handler(event, context):
                 "Access-Control-Allow-Methods": "*"
             },
             "body": json.dumps(response_body)
-        }
+        })
         
     except Exception as e:
         logger.error(f"Error processing request: {e}", exc_info=True)
-        return {
+        # Ensure connection is returned to pool on error
+        if connection:
+            return_db_connection(connection)
+        return finalize({
             "statusCode": 500,
             "headers": {
                 "Content-Type": "application/json",
@@ -639,16 +831,4 @@ def handler(event, context):
                 "Access-Control-Allow-Methods": "*"
             },
             "body": json.dumps({"error": f"Internal server error: {str(e)}"})
-        }
-    except Exception as e:
-        logger.error(f"Error processing request: {e}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*"
-            },
-            "body": json.dumps({"error": f"Internal server error: {str(e)}"})
-        }
+        })
