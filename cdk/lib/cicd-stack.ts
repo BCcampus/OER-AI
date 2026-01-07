@@ -61,8 +61,9 @@ export class CICDStack extends cdk.Stack {
 
     // Create the pipeline
     const pipeline = new codepipeline.Pipeline(this, "DockerImagePipeline", {
-      pipelineName: `${id}-DockerImagePipeline`,pipelineType: codepipeline.PipelineType.V2,
+      pipelineName: `${id}-DockerImagePipeline`,
     });
+
     const username = cdk.aws_ssm.StringParameter.valueForStringParameter(
       this,
       "oer-owner-name"
