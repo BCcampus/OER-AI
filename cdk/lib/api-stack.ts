@@ -1876,6 +1876,27 @@ export class ApiGatewayStack extends cdk.Stack {
       practiceMaterialImageWaiter.node.defaultChild as cdk.CfnResource
     );
 
+    // ========================================================================
+    // Provisioned Concurrency for Practice Material Lambda
+    // Keeps warm instances ready to eliminate cold starts
+    // ========================================================================
+    const practiceMaterialAlias = new lambda.Alias(
+      this,
+      `${id}-PracticeMaterialAlias`,
+      {
+        aliasName: "live",
+        version: practiceMaterialDockerFunc.currentVersion,
+        provisionedConcurrentExecutions: 2, // Number of warm instances
+      }
+    );
+
+    // Grant API Gateway permission to invoke the alias (for provisioned instances)
+    practiceMaterialAlias.addPermission("AllowApiGatewayInvokeAlias", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks/*/practice_materials*`,
+    });
+
     // IAM: Secrets, SSM, Bedrock
 
     practiceMaterialDockerFunc.addToRolePolicy(
