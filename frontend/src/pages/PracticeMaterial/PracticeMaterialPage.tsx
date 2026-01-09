@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { GenerateForm } from "@/components/PracticeMaterialPage/GenerateForm";
 import { MCQQuiz } from "@/components/PracticeMaterialPage/MCQQuiz";
 import { FlashcardSet } from "@/components/PracticeMaterialPage/FlashcardSet";
@@ -7,93 +7,161 @@ import type { PracticeMaterial } from "@/types/PracticeMaterial";
 import { isMCQQuiz, isFlashcardSet, isShortAnswer } from "@/types/PracticeMaterial";
 import { Card, CardDescription } from "@/components/ui/card";
 import { useTextbookView } from "@/providers/textbookView";
+import { usePracticeMaterialStream } from "@/hooks/usePracticeMaterialStream";
+import { Progress } from "@/components/ui/progress";
+
+// Status display mapping
+const STATUS_LABELS: Record<string, string> = {
+  idle: "",
+  initializing: "Initializing models...",
+  retrieving: "Retrieving relevant content...",
+  generating: "Generating practice material...",
+  validating: "Validating response...",
+  complete: "Complete!",
+  error: "Error occurred",
+};
 
 export default function PracticeMaterialPage() {
   const [materials, setMaterials] = useState<PracticeMaterial[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { textbook } = useTextbookView();
 
+  // WebSocket authentication token
+  const [wsToken, setWsToken] = useState<string | null>(null);
+
+  // Fetch authentication token on mount
+  useEffect(() => {
+    const apiEndpoint = import.meta.env.VITE_API_ENDPOINT;
+    if (!apiEndpoint) return;
+
+    let isActive = true;
+    let refreshTimeoutId: number | undefined;
+    const refreshDelayMs = 14 * 60 * 1000; // Refresh before 15 min expiry
+
+    async function fetchToken() {
+      if (!isActive) return;
+
+      try {
+        const response = await fetch(`${apiEndpoint}/user/publicToken`);
+        if (!response.ok) throw new Error("Token request failed");
+
+        const { token } = await response.json();
+        if (!isActive) return;
+
+        setWsToken(token);
+        refreshTimeoutId = window.setTimeout(fetchToken, refreshDelayMs);
+      } catch (error) {
+        console.error("[PracticeMaterial] Failed to fetch token:", error);
+        setWsToken(null);
+        // Retry in 30 seconds
+        refreshTimeoutId = window.setTimeout(fetchToken, 30000);
+      }
+    }
+
+    fetchToken();
+
+    return () => {
+      isActive = false;
+      if (refreshTimeoutId) window.clearTimeout(refreshTimeoutId);
+    };
+  }, []);
+
+  // Build authenticated WebSocket URL
+  const baseWsUrl = import.meta.env.VITE_WEBSOCKET_URL;
+  const wsUrl = useMemo(() => {
+    if (!baseWsUrl || !wsToken) return null;
+
+    try {
+      const url = new URL(baseWsUrl);
+      url.searchParams.set("token", wsToken);
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }, [baseWsUrl, wsToken]);
+
+  // Use the streaming hook with authenticated URL
+  const {
+    generate,
+    status,
+    progress,
+    result,
+    error: streamError,
+    isGenerating,
+  } = usePracticeMaterialStream(wsUrl);
+
+  // Handle successful result from WebSocket streaming
+  useEffect(() => {
+    if (status === "complete" && result) {
+      setMaterials((prev) => [result as PracticeMaterial, ...prev]);
+    }
+  }, [status, result]);
+
+  // Handle errors from streaming
+  useEffect(() => {
+    if (streamError) {
+      setErrorMsg(streamError);
+    }
+  }, [streamError]);
+
   const handleGenerate = async (formData: any) => {
     console.log("handleGenerate called with:", formData);
-    console.log("Material type being processed:", formData.materialType);
     setErrorMsg(null);
+
     if (!textbook?.id) {
       setErrorMsg("Please select a textbook before generating practice materials.");
       return;
     }
 
-    try {
-      setIsGenerating(true);
-      // Acquire public token
-      const tokenResp = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
-      if (!tokenResp.ok) throw new Error("Failed to get public token");
-      const { token } = await tokenResp.json();
+    // Map form data to streaming hook params
+    const materialType = formData.materialType === "flashcards"
+      ? "flashcard"
+      : formData.materialType === "shortAnswer"
+        ? "short_answer"
+        : "mcq";
 
-      // Build request body based on material type
-      let requestBody: any = {
-        topic: formData.topic,
-        difficulty: formData.difficulty,
-      };
-
-      if (formData.materialType === "flashcards") {
-        console.log("Building flashcard request body");
-        requestBody.material_type = "flashcard";
-        requestBody.num_cards = formData.numCards;
-        requestBody.card_type = formData.cardType;
-      } else if (formData.materialType === "shortAnswer") {
-        console.log("Building short answer request body");
-        requestBody.material_type = "short_answer";
-        requestBody.num_questions = formData.numQuestions;
-      } else {
-        console.log("Building MCQ request body");
-        requestBody.material_type = "mcq";
-        requestBody.num_questions = formData.numQuestions;
-        requestBody.num_options = formData.numOptions;
-      }
-
-      console.log("Final request body:", requestBody);
-
-      const resp = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbook.id}/practice_materials`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(text || "Failed to generate practice materials");
-      }
-
-      const data: PracticeMaterial = await resp.json();
-      setMaterials((prev) => [data, ...prev]);
-    } catch (e) {
-      const err = e as Error;
-      console.error("Error generating practice material:", err);
-      setErrorMsg(err.message || "Unknown error generating practice materials");
-    } finally {
-      setIsGenerating(false);
-    }
+    generate({
+      textbook_id: textbook.id,
+      topic: formData.topic,
+      material_type: materialType,
+      difficulty: formData.difficulty,
+      num_questions: formData.numQuestions,
+      num_options: formData.numOptions,
+      num_cards: formData.numCards,
+      card_type: formData.cardType,
+    });
   };
 
   const handleDeleteMaterial = (index: number) => {
     setMaterials((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Get status label
+  const statusLabel = STATUS_LABELS[status] || "";
+  const isProcessing = status !== "idle" && status !== "complete" && status !== "error";
+
   return (
     <div className="w-full max-w-[1800px] px-4 py-4">
       <div className="min-h-screen flex flex-col md:flex-row md:items-start md:justify-center gap-6">
         <div className="w-full md:w-[30%]">
           <GenerateForm onGenerate={handleGenerate} />
-          {isGenerating && (
+
+          {/* Progress Bar for WebSocket Streaming */}
+          {isProcessing && (
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>{statusLabel}</span>
+                <span>{progress}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+            </div>
+          )}
+
+          {/* Legacy generating state fallback */}
+          {isGenerating && status === "idle" && (
             <p className="text-sm text-muted-foreground mt-2">Generating practice materials...</p>
           )}
+
           {errorMsg && (
             <p className="text-sm text-destructive mt-2">{errorMsg}</p>
           )}
@@ -148,3 +216,4 @@ export default function PracticeMaterialPage() {
     </div>
   );
 }
+
