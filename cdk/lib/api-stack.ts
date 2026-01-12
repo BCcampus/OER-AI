@@ -1712,6 +1712,7 @@ export class ApiGatewayStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       environment: {
         TEXT_GEN_FUNCTION_NAME: textGenLambdaDockerFunc.functionName,
+        // PRACTICE_MATERIAL_FUNCTION_NAME added after function definition
       },
       functionName: `${id}-DefaultFunction`,
     });
@@ -1728,10 +1729,12 @@ export class ApiGatewayStack extends cdk.Stack {
     connectFunction.addToRolePolicy(wsPolicy);
     disconnectFunction.addToRolePolicy(wsPolicy);
     defaultFunction.addToRolePolicy(wsPolicy);
+    // practiceMaterialDockerFunc wsPolicy added after function definition
 
     jwtSecret.grantRead(connectFunction);
     // Grant the default function permission to invoke the text generation function
     textGenLambdaDockerFunc.grantInvoke(defaultFunction);
+    // practiceMaterialDockerFunc.grantInvoke added after function definition
 
     // Routes
     new apigatewayv2.WebSocketRoute(this, `${id}-ConnectRoute`, {
@@ -1854,6 +1857,8 @@ export class ApiGatewayStack extends cdk.Stack {
           PRACTICE_MATERIAL_MODEL_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
           BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
+          // Guardrails
+          GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
         },
         role: lambdaRole,
       }
@@ -1891,6 +1896,15 @@ export class ApiGatewayStack extends cdk.Stack {
     );
     */
 
+    // WebSocket streaming support - add environment variable and permissions
+    // (must be after practiceMaterialDockerFunc is defined)
+    defaultFunction.addEnvironment(
+      "PRACTICE_MATERIAL_FUNCTION_NAME",
+      practiceMaterialDockerFunc.functionName
+    );
+    practiceMaterialDockerFunc.addToRolePolicy(wsPolicy);
+    practiceMaterialDockerFunc.grantInvoke(defaultFunction);
+
     // IAM: Secrets, SSM, Bedrock
 
     practiceMaterialDockerFunc.addToRolePolicy(
@@ -1911,6 +1925,7 @@ export class ApiGatewayStack extends cdk.Stack {
           bedrockLLMParameter.parameterArn,
           embeddingModelParameter.parameterArn,
           bedrockRegionParameter.parameterArn,
+          guardrailParameter.parameterArn,
         ],
       })
     );
@@ -1918,7 +1933,7 @@ export class ApiGatewayStack extends cdk.Stack {
     practiceMaterialDockerFunc.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ["bedrock:InvokeModel"],
+        actions: ["bedrock:InvokeModel", "bedrock:ApplyGuardrail"],
         resources: [
           // Llama 3 model (for practice material generation)
           `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
@@ -1926,6 +1941,8 @@ export class ApiGatewayStack extends cdk.Stack {
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
           // Cohere embeddings model (for retrieval)
           `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
+          // Guardrail
+          `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
         ],
       })
     );

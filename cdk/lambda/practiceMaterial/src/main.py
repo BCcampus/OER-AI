@@ -20,18 +20,20 @@ RDS_PROXY_ENDPOINT = os.environ.get("RDS_PROXY_ENDPOINT", "")
 PRACTICE_MATERIAL_MODEL_PARAM = os.environ.get("PRACTICE_MATERIAL_MODEL_PARAM")
 EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
 BEDROCK_REGION_PARAM = os.environ.get("BEDROCK_REGION_PARAM")
+GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
 COLD_START_METRIC = os.environ.get("COLD_START_METRIC", "false").lower() == "true"
 
 # AWS Clients
 secrets_manager = boto3.client("secretsmanager", region_name=REGION)
 ssm_client = boto3.client("ssm", region_name=REGION)
-bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
+bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')  # For embeddings (Cohere is in us-east-1)
 
 # Cache
 _db_secret: Dict[str, Any] | None = None
 _practice_material_model_id: str | None = None
 _embedding_model_id: str | None = None
 _bedrock_region: str | None = None
+_guardrail_id: str | None = None
 _embeddings = None
 _llm = None
 _is_cold_start = True
@@ -66,6 +68,60 @@ def emit_cold_start_metrics(function_name: str, execution_ms: int, cold_start_ms
     print(json.dumps(payload))
 
 
+def send_websocket_progress(
+    connection_id: str | None,
+    domain_name: str | None,
+    stage: str | None,
+    status: str,
+    progress: int,
+    data: Dict[str, Any] | None = None,
+    error: str | None = None
+) -> None:
+    """
+    Send progress updates to the client via WebSocket.
+    
+    Args:
+        connection_id: WebSocket connection ID
+        domain_name: API Gateway domain name
+        stage: API Gateway stage
+        status: Status message (e.g., 'initializing', 'retrieving', 'generating', 'complete', 'error')
+        progress: Progress percentage (0-100)
+        data: Optional data payload (for 'complete' status)
+        error: Optional error message (for 'error' status)
+    """
+    if not connection_id or not domain_name or not stage:
+        logger.debug("No WebSocket context, skipping progress update")
+        return
+    
+    try:
+        endpoint_url = f"https://{domain_name}/{stage}"
+        apigw_management = boto3.client(
+            "apigatewaymanagementapi",
+            endpoint_url=endpoint_url,
+            region_name=REGION
+        )
+        
+        message = {
+            "type": "practice_material_progress",
+            "status": status,
+            "progress": progress,
+        }
+        
+        if data is not None:
+            message["data"] = data
+        if error is not None:
+            message["error"] = error
+        
+        apigw_management.post_to_connection(
+            ConnectionId=connection_id,
+            Data=json.dumps(message).encode("utf-8")
+        )
+        logger.info(f"Sent WebSocket progress: status={status}, progress={progress}%")
+    except Exception as e:
+        logger.warning(f"Failed to send WebSocket progress: {e}")
+        # Don't fail the request if WebSocket update fails
+
+
 def get_secret_dict(name: str) -> Dict[str, Any]:
     global _db_secret
     if _db_secret is None:
@@ -88,7 +144,7 @@ def get_parameter(param_name: str | None, cached_var: str | None) -> str | None:
 
 def initialize_constants():
     """Initialize model IDs and region from SSM parameters"""
-    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _llm
+    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _llm, _guardrail_id
     
     # Get practice material model ID from SSM
     _practice_material_model_id = get_parameter(PRACTICE_MATERIAL_MODEL_PARAM, _practice_material_model_id)
@@ -106,6 +162,15 @@ def initialize_constants():
         _bedrock_region = REGION
         logger.info(f"BEDROCK_REGION_PARAM not configured, using deployment region: {_bedrock_region}")
     
+    # Get Guardrail ID from SSM
+    if GUARDRAIL_ID_PARAM and _guardrail_id is None:
+        try:
+            _guardrail_id = get_parameter(GUARDRAIL_ID_PARAM, _guardrail_id)
+            logger.info(f"Guardrail ID loaded successfully")
+        except Exception as e:
+            logger.warning(f"Failed to load guardrail ID: {e}")
+            _guardrail_id = None
+    
     if _embeddings is None:
         _embeddings = BedrockEmbeddings(
             model_id=_embedding_model_id,
@@ -119,7 +184,7 @@ def initialize_constants():
         llm_client = boto3.client("bedrock-runtime", region_name=_bedrock_region)
         model_kwargs = {
             "temperature": 0.6,
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "top_p": 0.9,
         }
         logger.info(f"Creating ChatBedrock instance for model: {_practice_material_model_id}")
@@ -131,6 +196,57 @@ def initialize_constants():
             client=llm_client
         )
         logger.info("ChatBedrock LLM initialized successfully")
+
+
+def apply_guardrails(text: str, source: str = "INPUT") -> dict:
+    """Apply Bedrock guardrails to input or output text.
+    
+    SECURITY: Uses fail-closed model - blocks content when guardrails fail.
+    
+    Args:
+        text: The text to check against guardrails
+        source: Either "INPUT" or "OUTPUT"
+        
+    Returns:
+        dict with 'blocked', 'action', and 'assessments' keys
+    """
+    global _guardrail_id
+    
+    if not _guardrail_id:
+        logger.debug("No guardrail ID configured, skipping guardrail check")
+        return {'blocked': False, 'action': 'NONE', 'assessments': []}
+    
+    try:
+        # Create client without region - uses Lambda's default region (ca-central-1)
+        bedrock_client = boto3.client("bedrock-runtime")
+        response = bedrock_client.apply_guardrail(
+            guardrailIdentifier=_guardrail_id,
+            guardrailVersion="1",  # Published version
+            source=source,
+            content=[{"text": {"text": text}}]
+        )
+        
+        action = response.get('action', 'NONE')
+        blocked = action == 'GUARDRAIL_INTERVENED'
+        
+        if blocked:
+            logger.warning(f"SECURITY: Guardrail blocked {source}: action={action}")
+        
+        return {
+            'blocked': blocked,
+            'action': action,
+            'assessments': response.get('assessments', [])
+        }
+    except Exception as e:
+        logger.error(f"SECURITY ALERT: Guardrail check failed: {e}")
+        # SECURITY: Fail-closed - block content when guardrails fail
+        return {
+            'blocked': True,
+            'action': 'GUARDRAIL_ERROR',
+            'assessments': [],
+            'error': str(e)
+        }
+
 
 
 def clamp(value: int, lo: int, hi: int) -> int:
@@ -585,6 +701,16 @@ def handler(event, context):
 
     logger.info("PracticeMaterial Lambda (Docker) invoked")
 
+    # Handle warmup requests - return immediately after initialization
+    if event.get("warmup") or event.get("httpMethod") == "HEAD":
+        logger.info("Warmup request received - initializing and returning early")
+        try:
+            initialize_constants()
+            logger.info("Warmup successful - models initialized")
+        except Exception as e:
+            logger.warning(f"Warmup initialization failed: {e}")
+        return {"statusCode": 200, "body": json.dumps({"status": "warm"})}
+
     # Validate path and parse inputs
     resource = (event.get("httpMethod", "") + " " + event.get("resource", "")).strip()
     
@@ -605,6 +731,35 @@ def handler(event, context):
     topic = str(body.get("topic", "")).strip()
     if not topic:
         return finalize({"statusCode": 400, "body": json.dumps({"error": "'topic' is required"})})
+    
+    # Apply input guardrails on topic
+    topic_guardrail_result = apply_guardrails(topic, source="INPUT")
+    if topic_guardrail_result.get('blocked', False):
+        logger.warning(f"SECURITY: Topic blocked by guardrails: {topic}")
+        # Determine error message based on whether it was a technical error or content policy
+        if topic_guardrail_result.get('error'):
+            logger.error(f"SECURITY: Guardrail error: {topic_guardrail_result.get('error')}")
+            error_message = "I'm experiencing technical difficulties and cannot process your request at this time. Please try again later."
+        else:
+            error_message = "I'm here to help with your learning! However, I can't generate practice materials for that particular topic. Let's focus on educational content instead."
+        
+        # Send error via WebSocket for streaming clients
+        request_context = event.get("requestContext") or {}
+        is_websocket = event.get("isWebSocket", False)
+        if is_websocket:
+            send_websocket_progress(
+                request_context.get("connectionId"),
+                request_context.get("domainName"),
+                request_context.get("stage"),
+                "error", 0,
+                error=error_message
+            )
+        return finalize({"statusCode": 400, "body": json.dumps({
+            "error": "Topic not allowed by content policy",
+            "guardrail_blocked": True
+        })})
+    
+    
     material_type = str(body.get("material_type", "mcq")).lower().strip()
     if material_type not in ["mcq", "flashcard", "short_answer"]:
         return finalize({"statusCode": 400, "body": json.dumps({"error": "material_type must be 'mcq', 'flashcard', or 'short_answer'"})})
@@ -624,13 +779,26 @@ def handler(event, context):
     if material_type == "short_answer":
         num_questions = clamp(int(body.get("num_questions", 3)), 1, 10)
 
+    # Extract WebSocket context for streaming progress updates
+    request_context = event.get("requestContext") or {}
+    is_websocket = event.get("isWebSocket", False)
+    connection_id = request_context.get("connectionId") if is_websocket else None
+    domain_name = request_context.get("domainName") if is_websocket else None
+    stage = request_context.get("stage") if is_websocket else None
+    
+    # Helper to send progress updates
+    def send_progress(status: str, progress: int, data=None, error=None):
+        send_websocket_progress(connection_id, domain_name, stage, status, progress, data, error)
+
     try:
-        # Initialize constants from SSM parameters
+        # Stage 1: Initialize
+        send_progress("initializing", 5)
         logger.info("Initializing constants from SSM parameters...")
         initialize_constants()
         logger.info("Constants initialized successfully")
 
-        # Get DB credentials from Secrets Manager
+        # Stage 2: Get DB credentials
+        send_progress("initializing", 10)
         logger.info("Getting DB credentials...")
         db = get_secret_dict(SM_DB_CREDENTIALS)
         logger.info("DB credentials retrieved")
@@ -643,7 +811,8 @@ def handler(event, context):
             "port": db["port"],
         }
 
-        # Build retriever
+        # Stage 3: Build retriever
+        send_progress("retrieving", 15)
         logger.info(f"Building retriever for textbook {textbook_id}...")
         retriever = get_textbook_retriever(
             llm=None,
@@ -652,6 +821,7 @@ def handler(event, context):
             embeddings=_embeddings,
         )
         logger.info("Retriever built successfully")
+        send_progress("retrieving", 20)
         
         if retriever is None:
             return finalize({
@@ -660,10 +830,12 @@ def handler(event, context):
                 "body": json.dumps({"error": f"No embeddings found for textbook {textbook_id}"}),
             })
 
-        # Invoke retriever to get relevant context
+        # Stage 4: Invoke retriever
+        send_progress("retrieving", 25)
         logger.info(f"Invoking retriever for topic: {topic}")
         docs = retriever.invoke(topic)
         logger.info(f"Retrieved {len(docs)} documents")
+        send_progress("retrieving", 30)
         
         snippets = [d.page_content.strip()[:500] for d in docs][:6]
         
@@ -671,7 +843,8 @@ def handler(event, context):
         sources_used = extract_sources_from_docs(docs)
         logger.info(f"Extracted {len(sources_used)} sources: {sources_used}")
 
-        # Build prompt based on material type
+        # Stage 5: Build prompt
+        send_progress("generating", 35)
         logger.info(f"Building prompt for {material_type}...")
         if material_type == "mcq":
             prompt = build_prompt(topic, difficulty, num_questions, num_options, snippets)
@@ -681,11 +854,13 @@ def handler(event, context):
             prompt = build_short_answer_prompt(topic, difficulty, num_questions, snippets)
         logger.info(f"Prompt built, length: {len(prompt)} chars")
 
-        # Invoke LLM
+        # Stage 6: Invoke LLM (the slowest part - ~15 seconds)
+        send_progress("generating", 40)
         logger.info(f"Invoking LLM for {material_type} generation...")
         response = _llm.invoke(prompt)
         output_text = response.content
         logger.info(f"LLM response received, length: {len(output_text)} chars")
+        send_progress("validating", 85)
         
         # Log raw output for debugging
         logger.info(f"Raw LLM output: {output_text}")
@@ -722,6 +897,8 @@ def handler(event, context):
             except Exception as e2:
                 logger.error(f"Retry also failed: {e2}")
                 logger.error(f"Raw retry output (first 2000 chars): {output_text2[:2000]}")
+                # Send error via WebSocket for streaming clients
+                send_progress("error", 0, error=f"Failed to parse LLM response: {str(e2)}")
                 # Return the raw LLM responses to client for debugging
                 return finalize({
                     "statusCode": 500,
@@ -740,6 +917,26 @@ def handler(event, context):
                     })
                 })
 
+        # Apply output guardrails on generated content
+        # Convert result to string for guardrail check
+        result_text = json.dumps(result)
+        output_guardrail_result = apply_guardrails(result_text, source="OUTPUT")
+        if output_guardrail_result.get('blocked', False):
+            # Determine error message based on whether it was a technical error or content policy
+            if output_guardrail_result.get('error'):
+                logger.error(f"SECURITY: Output guardrail error: {output_guardrail_result.get('error')}")
+                error_message = "I apologize, but I'm experiencing technical difficulties. Please try again later."
+            else:
+                logger.warning("SECURITY: Generated content blocked by output guardrails")
+                error_message = "The generated content was filtered by our safety policy. Please try a different topic."
+            
+            send_progress("error", 0, error=error_message)
+            return finalize({"statusCode": 400, "body": json.dumps({
+                "error": "Generated content blocked by content policy",
+                "guardrail_blocked": True
+            })})
+        
+        
         # Add sources to response 
         response_data = {
             **result,
@@ -788,6 +985,14 @@ def handler(event, context):
         except Exception as analytics_error:
             logger.warning(f"Analytics tracking failed but continuing: {analytics_error}")
         
+        # Send completion via WebSocket if applicable
+        send_progress("complete", 100, data=response_data)
+        
+        # For WebSocket invocations, return minimal response (data sent via WebSocket)
+        if is_websocket:
+            return {"statusCode": 200}
+        
+        # For REST API invocations, return full response
         return finalize({
             "statusCode": 200,
             "headers": {
@@ -800,6 +1005,8 @@ def handler(event, context):
         })
     except Exception as e:
         logger.exception("Error generating practice materials")
+        # Send error via WebSocket if applicable
+        send_progress("error", 0, error=str(e))
         return finalize({"statusCode": 500, "body": json.dumps({"error": str(e)})})
 
 
