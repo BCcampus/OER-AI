@@ -1857,6 +1857,8 @@ export class ApiGatewayStack extends cdk.Stack {
           PRACTICE_MATERIAL_MODEL_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
           BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
+          // Guardrails
+          GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
         },
         role: lambdaRole,
       }
@@ -1923,6 +1925,7 @@ export class ApiGatewayStack extends cdk.Stack {
           bedrockLLMParameter.parameterArn,
           embeddingModelParameter.parameterArn,
           bedrockRegionParameter.parameterArn,
+          guardrailParameter.parameterArn,
         ],
       })
     );
@@ -1930,7 +1933,7 @@ export class ApiGatewayStack extends cdk.Stack {
     practiceMaterialDockerFunc.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ["bedrock:InvokeModel"],
+        actions: ["bedrock:InvokeModel", "bedrock:ApplyGuardrail"],
         resources: [
           // Llama 3 model (for practice material generation)
           `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
@@ -1938,6 +1941,8 @@ export class ApiGatewayStack extends cdk.Stack {
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
           // Cohere embeddings model (for retrieval)
           `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
+          // Guardrail
+          `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
         ],
       })
     );

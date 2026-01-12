@@ -20,6 +20,7 @@ RDS_PROXY_ENDPOINT = os.environ.get("RDS_PROXY_ENDPOINT", "")
 PRACTICE_MATERIAL_MODEL_PARAM = os.environ.get("PRACTICE_MATERIAL_MODEL_PARAM")
 EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
 BEDROCK_REGION_PARAM = os.environ.get("BEDROCK_REGION_PARAM")
+GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
 COLD_START_METRIC = os.environ.get("COLD_START_METRIC", "false").lower() == "true"
 
 # AWS Clients
@@ -32,6 +33,7 @@ _db_secret: Dict[str, Any] | None = None
 _practice_material_model_id: str | None = None
 _embedding_model_id: str | None = None
 _bedrock_region: str | None = None
+_guardrail_id: str | None = None
 _embeddings = None
 _llm = None
 _is_cold_start = True
@@ -142,7 +144,7 @@ def get_parameter(param_name: str | None, cached_var: str | None) -> str | None:
 
 def initialize_constants():
     """Initialize model IDs and region from SSM parameters"""
-    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _llm
+    global _practice_material_model_id, _embedding_model_id, _bedrock_region, _embeddings, _llm, _guardrail_id
     
     # Get practice material model ID from SSM
     _practice_material_model_id = get_parameter(PRACTICE_MATERIAL_MODEL_PARAM, _practice_material_model_id)
@@ -159,6 +161,15 @@ def initialize_constants():
     else:
         _bedrock_region = REGION
         logger.info(f"BEDROCK_REGION_PARAM not configured, using deployment region: {_bedrock_region}")
+    
+    # Get Guardrail ID from SSM
+    if GUARDRAIL_ID_PARAM and _guardrail_id is None:
+        try:
+            _guardrail_id = get_parameter(GUARDRAIL_ID_PARAM, _guardrail_id)
+            logger.info(f"Guardrail ID loaded successfully")
+        except Exception as e:
+            logger.warning(f"Failed to load guardrail ID: {e}")
+            _guardrail_id = None
     
     if _embeddings is None:
         _embeddings = BedrockEmbeddings(
@@ -185,6 +196,47 @@ def initialize_constants():
             client=llm_client
         )
         logger.info("ChatBedrock LLM initialized successfully")
+
+
+def apply_guardrails(text: str, source: str = "INPUT") -> dict:
+    """Apply Bedrock guardrails to input or output text.
+    
+    Args:
+        text: The text to check against guardrails
+        source: Either "INPUT" or "OUTPUT"
+        
+    Returns:
+        dict with 'blocked', 'action', and 'assessments' keys
+    """
+    global _guardrail_id
+    
+    if not _guardrail_id:
+        logger.debug("No guardrail ID configured, skipping guardrail check")
+        return {'blocked': False, 'action': 'NONE', 'assessments': []}
+    
+    try:
+        response = bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=_guardrail_id,
+            guardrailVersion="DRAFT",
+            source=source,
+            content=[{"text": {"text": text}}]
+        )
+        
+        action = response.get('action', 'NONE')
+        blocked = action == 'GUARDRAIL_INTERVENED'
+        
+        if blocked:
+            logger.warning(f"Guardrail blocked {source}: action={action}")
+        
+        return {
+            'blocked': blocked,
+            'action': action,
+            'assessments': response.get('assessments', [])
+        }
+    except Exception as e:
+        logger.error(f"Error applying guardrails: {e}")
+        # Return safe defaults if guardrail check fails - allow content through
+        return {'blocked': False, 'action': 'NONE', 'assessments': []}
 
 
 def clamp(value: int, lo: int, hi: int) -> int:
@@ -669,6 +721,27 @@ def handler(event, context):
     topic = str(body.get("topic", "")).strip()
     if not topic:
         return finalize({"statusCode": 400, "body": json.dumps({"error": "'topic' is required"})})
+    
+    # Apply input guardrails on topic
+    topic_guardrail_result = apply_guardrails(topic, source="INPUT")
+    if topic_guardrail_result.get('blocked', False):
+        logger.warning(f"Topic blocked by guardrails: {topic}")
+        # Send error via WebSocket for streaming clients
+        request_context = event.get("requestContext") or {}
+        is_websocket = event.get("isWebSocket", False)
+        if is_websocket:
+            send_websocket_progress(
+                request_context.get("connectionId"),
+                request_context.get("domainName"),
+                request_context.get("stage"),
+                "error", 0,
+                error="I'm here to help with your learning! However, I can't generate practice materials for that particular topic. Let's focus on educational content instead."
+            )
+        return finalize({"statusCode": 400, "body": json.dumps({
+            "error": "Topic not allowed by content policy",
+            "guardrail_blocked": True
+        })})
+    
     material_type = str(body.get("material_type", "mcq")).lower().strip()
     if material_type not in ["mcq", "flashcard", "short_answer"]:
         return finalize({"statusCode": 400, "body": json.dumps({"error": "material_type must be 'mcq', 'flashcard', or 'short_answer'"})})
@@ -826,6 +899,18 @@ def handler(event, context):
                     })
                 })
 
+        # Apply output guardrails on generated content
+        # Convert result to string for guardrail check
+        result_text = json.dumps(result)
+        output_guardrail_result = apply_guardrails(result_text, source="OUTPUT")
+        if output_guardrail_result.get('blocked', False):
+            logger.warning("Generated content blocked by output guardrails")
+            send_progress("error", 0, error="The generated content was filtered by our safety policy. Please try a different topic.")
+            return finalize({"statusCode": 400, "body": json.dumps({
+                "error": "Generated content blocked by content policy",
+                "guardrail_blocked": True
+            })})
+        
         # Add sources to response 
         response_data = {
             **result,
