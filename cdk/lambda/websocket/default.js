@@ -101,6 +101,31 @@ exports.handler = async (event) => {
       return { statusCode: 200 };
     }
 
+    // Handle warmup requests - invoke practice material Lambda to pre-warm it
+    if (action === "warmup") {
+      console.log("Warmup request received");
+      
+      const warmupPayload = {
+        warmup: true, // Flag to trigger early return in Lambda
+      };
+
+      try {
+        await lambda.send(
+          new InvokeCommand({
+            FunctionName: process.env.PRACTICE_MATERIAL_FUNCTION_NAME,
+            InvocationType: "Event", // Fire-and-forget
+            Payload: JSON.stringify(warmupPayload),
+          })
+        );
+        console.log("Warmup invocation sent successfully");
+      } catch (warmupError) {
+        console.warn("Warmup invocation failed:", warmupError);
+        // Don't fail the request - warmup is best-effort
+      }
+
+      return { statusCode: 200, body: JSON.stringify({ status: "warming" }) };
+    }
+
     return {
       statusCode: 400,
       body: JSON.stringify({ error: "Unknown action" }),

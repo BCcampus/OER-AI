@@ -31,24 +31,43 @@ Amplify.configure({
 });
 
 // Pre-warm Lambdas on app load to reduce cold start latency
-function useLambdaWarmup() {
+// Uses WebSocket to send a warmup action that triggers the practice material Lambda
+async function warmupLambdas() {
   const apiEndpoint = import.meta.env.VITE_API_ENDPOINT;
+  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL;
 
-  if (!apiEndpoint) return;
+  if (!apiEndpoint || !wsUrl) return;
 
-  // Fire-and-forget warmup requests - use HEAD to trigger warmup without heavy processing
-  // Practice Material Lambda
-  fetch(`${apiEndpoint}/textbooks/warmup/practice_materials`, { method: 'HEAD' })
-    .catch(() => { }); // Ignore errors - warmup is best-effort
+  try {
+    // Get authentication token
+    const tokenResponse = await fetch(`${apiEndpoint}/user/publicToken`);
+    if (!tokenResponse.ok) return;
 
-  // Text Generation Lambda (if applicable)
-  // fetch(`${apiEndpoint}/warmup/textgen`, { method: 'HEAD' }).catch(() => {});
+    const { token } = await tokenResponse.json();
+    if (!token) return;
+
+    // Connect to WebSocket and send warmup action
+    const ws = new WebSocket(`${wsUrl}?token=${token}`);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ action: "warmup" }));
+      // Close connection after sending - we don't need to wait for response
+      setTimeout(() => ws.close(), 1000);
+    };
+
+    ws.onerror = () => {
+      // Ignore errors - warmup is best-effort
+    };
+  } catch {
+    // Ignore errors - warmup is best-effort
+  }
 }
 
-function App() {
-  // Trigger Lambda warmup once on app mount
-  useLambdaWarmup();
+// Call warmup once when module loads
+warmupLambdas();
 
+
+function App() {
   return (
     <BrowserRouter>
       <UserSessionProvider>
