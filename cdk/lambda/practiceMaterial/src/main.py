@@ -201,6 +201,8 @@ def initialize_constants():
 def apply_guardrails(text: str, source: str = "INPUT") -> dict:
     """Apply Bedrock guardrails to input or output text.
     
+    SECURITY: Uses fail-closed model - blocks content when guardrails fail.
+    
     Args:
         text: The text to check against guardrails
         source: Either "INPUT" or "OUTPUT"
@@ -217,7 +219,7 @@ def apply_guardrails(text: str, source: str = "INPUT") -> dict:
     try:
         response = bedrock_runtime.apply_guardrail(
             guardrailIdentifier=_guardrail_id,
-            guardrailVersion="DRAFT",
+            guardrailVersion="1",  # Use published version, not DRAFT
             source=source,
             content=[{"text": {"text": text}}]
         )
@@ -226,7 +228,7 @@ def apply_guardrails(text: str, source: str = "INPUT") -> dict:
         blocked = action == 'GUARDRAIL_INTERVENED'
         
         if blocked:
-            logger.warning(f"Guardrail blocked {source}: action={action}")
+            logger.warning(f"SECURITY: Guardrail blocked {source}: action={action}")
         
         return {
             'blocked': blocked,
@@ -234,9 +236,15 @@ def apply_guardrails(text: str, source: str = "INPUT") -> dict:
             'assessments': response.get('assessments', [])
         }
     except Exception as e:
-        logger.error(f"Error applying guardrails: {e}")
-        # Return safe defaults if guardrail check fails - allow content through
-        return {'blocked': False, 'action': 'NONE', 'assessments': []}
+        logger.error(f"SECURITY ALERT: Guardrail check failed: {e}")
+        # SECURITY: Fail-closed - block content when guardrails fail
+        return {
+            'blocked': True,
+            'action': 'GUARDRAIL_ERROR',
+            'assessments': [],
+            'error': str(e)
+        }
+
 
 
 def clamp(value: int, lo: int, hi: int) -> int:
@@ -725,7 +733,14 @@ def handler(event, context):
     # Apply input guardrails on topic
     topic_guardrail_result = apply_guardrails(topic, source="INPUT")
     if topic_guardrail_result.get('blocked', False):
-        logger.warning(f"Topic blocked by guardrails: {topic}")
+        logger.warning(f"SECURITY: Topic blocked by guardrails: {topic}")
+        # Determine error message based on whether it was a technical error or content policy
+        if topic_guardrail_result.get('error'):
+            logger.error(f"SECURITY: Guardrail error: {topic_guardrail_result.get('error')}")
+            error_message = "I'm experiencing technical difficulties and cannot process your request at this time. Please try again later."
+        else:
+            error_message = "I'm here to help with your learning! However, I can't generate practice materials for that particular topic. Let's focus on educational content instead."
+        
         # Send error via WebSocket for streaming clients
         request_context = event.get("requestContext") or {}
         is_websocket = event.get("isWebSocket", False)
@@ -735,12 +750,13 @@ def handler(event, context):
                 request_context.get("domainName"),
                 request_context.get("stage"),
                 "error", 0,
-                error="I'm here to help with your learning! However, I can't generate practice materials for that particular topic. Let's focus on educational content instead."
+                error=error_message
             )
         return finalize({"statusCode": 400, "body": json.dumps({
             "error": "Topic not allowed by content policy",
             "guardrail_blocked": True
         })})
+    
     
     material_type = str(body.get("material_type", "mcq")).lower().strip()
     if material_type not in ["mcq", "flashcard", "short_answer"]:
@@ -904,12 +920,20 @@ def handler(event, context):
         result_text = json.dumps(result)
         output_guardrail_result = apply_guardrails(result_text, source="OUTPUT")
         if output_guardrail_result.get('blocked', False):
-            logger.warning("Generated content blocked by output guardrails")
-            send_progress("error", 0, error="The generated content was filtered by our safety policy. Please try a different topic.")
+            # Determine error message based on whether it was a technical error or content policy
+            if output_guardrail_result.get('error'):
+                logger.error(f"SECURITY: Output guardrail error: {output_guardrail_result.get('error')}")
+                error_message = "I apologize, but I'm experiencing technical difficulties. Please try again later."
+            else:
+                logger.warning("SECURITY: Generated content blocked by output guardrails")
+                error_message = "The generated content was filtered by our safety policy. Please try a different topic."
+            
+            send_progress("error", 0, error=error_message)
             return finalize({"statusCode": 400, "body": json.dumps({
                 "error": "Generated content blocked by content policy",
                 "guardrail_blocked": True
             })})
+        
         
         # Add sources to response 
         response_data = {

@@ -102,13 +102,16 @@ def get_bedrock_llm(
         raise
 
 def apply_guardrails(text: str, guardrail_id: str, source: str = "INPUT") -> dict:
-    """Apply Bedrock guardrails to input or output text."""
+    """Apply Bedrock guardrails to input or output text.
+    
+    SECURITY: Uses fail-closed model - blocks content when guardrails fail.
+    """
     try:
         bedrock_runtime = boto3.client("bedrock-runtime")
         
         response = bedrock_runtime.apply_guardrail(
             guardrailIdentifier=guardrail_id,
-            guardrailVersion="DRAFT", #Use appropriate version once published (e.g., "1", "2", etc.)
+            guardrailVersion="1",  # Use published version, not DRAFT
             source=source,
             content=[
                 {
@@ -129,13 +132,14 @@ def apply_guardrails(text: str, guardrail_id: str, source: str = "INPUT") -> dic
             'assessments': response.get('assessments', [])
         }
     except Exception as e:
-        logger.error(f"Error applying guardrails: {str(e)}")
+        logger.error(f"SECURITY ALERT: Guardrail check failed: {str(e)}")
         logger.error(traceback.format_exc())
-        # Return safe defaults if guardrail check fails
+        # SECURITY: Fail-closed - block content when guardrails fail
         return {
-            'blocked': False,
-            'action': 'NONE',
-            'assessments': []
+            'blocked': True,
+            'action': 'GUARDRAIL_ERROR',
+            'assessments': [],
+            'error': str(e)
         }
 
 
@@ -233,33 +237,48 @@ Remember: Your goal is to facilitate active learning and critical thinking about
 
 
 def _apply_input_guardrails(query: str, guardrail_id: str) -> tuple[list, str]:
-    """Apply input guardrails and return assessments and error message if blocked."""
+    """Apply input guardrails and return assessments and error message if blocked.
+    
+    SECURITY: Uses fail-closed model - returns error when guardrails fail.
+    """
     guardrail_assessments = []
     
     if guardrail_id and guardrail_id.strip():
-        try:
-            guardrail_response = apply_guardrails(query, guardrail_id, source="INPUT")
-            guardrail_assessments.extend(guardrail_response.get('assessments', []))
-            if guardrail_response.get('blocked', False):
+        guardrail_response = apply_guardrails(query, guardrail_id, source="INPUT")
+        guardrail_assessments.extend(guardrail_response.get('assessments', []))
+        
+        if guardrail_response.get('blocked', False):
+            if guardrail_response.get('error'):
+                # Technical error - fail-closed, don't reveal details
+                logger.error(f"SECURITY: Guardrail error blocked request: {guardrail_response.get('error')}")
+                error_msg = "I'm experiencing technical difficulties and cannot process your request at this time. Please try again later."
+            else:
+                # Content policy violation
+                logger.warning("SECURITY: Content blocked by guardrails")
                 error_msg = "I'm here to help with your learning! However, I can't assist with that particular request. Let's focus on your textbook material instead. What specific topic would you like to explore?"
-                return guardrail_assessments, error_msg
-        except Exception as e:
-            logger.warning(f"Input guardrail check failed: {e}")
+            return guardrail_assessments, error_msg
     
     return guardrail_assessments, None
 
 
 def _apply_output_guardrails(response_text: str, guardrail_id: str, guardrail_assessments: list) -> tuple[str, list]:
-    """Apply output guardrails and return modified response and updated assessments."""
+    """Apply output guardrails and return modified response and updated assessments.
+    
+    SECURITY: Uses fail-closed model - returns safe message when guardrails fail.
+    """
     if guardrail_id and guardrail_id.strip() and response_text:
-        try:
-            output_guardrail_response = apply_guardrails(response_text, guardrail_id, source="OUTPUT")
-            guardrail_assessments.extend(output_guardrail_response.get('assessments', []))
-            if output_guardrail_response.get('blocked', False):
-                logger.warning("Output blocked by guardrails")
+        output_guardrail_response = apply_guardrails(response_text, guardrail_id, source="OUTPUT")
+        guardrail_assessments.extend(output_guardrail_response.get('assessments', []))
+        
+        if output_guardrail_response.get('blocked', False):
+            if output_guardrail_response.get('error'):
+                # Technical error - fail-closed, provide safe fallback
+                logger.error(f"SECURITY: Output guardrail error: {output_guardrail_response.get('error')}")
+                return "I apologize, but I'm experiencing technical difficulties. Please try rephrasing your question.", guardrail_assessments
+            else:
+                # Content policy violation
+                logger.warning("SECURITY: Output blocked by guardrails")
                 return "I want to keep our conversation focused on learning and education. Let me redirect us back to your studies. What concept from your textbook can I help you understand better?", guardrail_assessments
-        except Exception as e:
-            logger.warning(f"Output guardrail check failed: {e}")
     
     return response_text, guardrail_assessments
 
