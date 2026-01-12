@@ -111,7 +111,7 @@ def apply_guardrails(text: str, guardrail_id: str, source: str = "INPUT") -> dic
         
         response = bedrock_runtime.apply_guardrail(
             guardrailIdentifier=guardrail_id,
-            guardrailVersion="1",  # Use published version, not DRAFT
+            guardrailVersion="1",  # Published version
             source=source,
             content=[
                 {

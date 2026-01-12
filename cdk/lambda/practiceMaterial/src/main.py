@@ -219,7 +219,7 @@ def apply_guardrails(text: str, source: str = "INPUT") -> dict:
     try:
         response = bedrock_runtime.apply_guardrail(
             guardrailIdentifier=_guardrail_id,
-            guardrailVersion="1",  # Use published version, not DRAFT
+            guardrailVersion="1",  # Published version
             source=source,
             content=[{"text": {"text": text}}]
         )
