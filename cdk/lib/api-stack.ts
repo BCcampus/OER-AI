@@ -1881,29 +1881,26 @@ export class ApiGatewayStack extends cdk.Stack {
       practiceMaterialImageWaiter.node.defaultChild as cdk.CfnResource
     );
 
-    // NOTE: Provisioned Concurrency disabled due to account concurrent execution limits
-    // To enable, request a Lambda concurrent execution limit increase via AWS Service Quotas
-    // Then uncomment the following:
-    /*
+    // Provisioned Concurrency enabled with 1 execution to improve cold start performance
     const practiceMaterialAlias = new lambda.Alias(
       this,
       `${id}-PracticeMaterialAlias`,
       {
         aliasName: "live",
         version: practiceMaterialDockerFunc.currentVersion,
-        provisionedConcurrentExecutions: 2,
+        provisionedConcurrentExecutions: 1,
       }
     );
-    */
 
     // WebSocket streaming support - add environment variable and permissions
     // (must be after practiceMaterialDockerFunc is defined)
+    // Use alias to leverage provisioned concurrency
     defaultFunction.addEnvironment(
       "PRACTICE_MATERIAL_FUNCTION_NAME",
-      practiceMaterialDockerFunc.functionName
+      practiceMaterialAlias.functionName
     );
     practiceMaterialDockerFunc.addToRolePolicy(wsPolicy);
-    practiceMaterialDockerFunc.grantInvoke(defaultFunction);
+    practiceMaterialAlias.grantInvoke(defaultFunction);
 
     // IAM: Secrets, SSM, Bedrock
 
@@ -1926,6 +1923,7 @@ export class ApiGatewayStack extends cdk.Stack {
           embeddingModelParameter.parameterArn,
           bedrockRegionParameter.parameterArn,
           guardrailParameter.parameterArn,
+          guardrailParameter.parameterArn,
         ],
       })
     );
@@ -1941,6 +1939,8 @@ export class ApiGatewayStack extends cdk.Stack {
           `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
           // Cohere embeddings model (for retrieval)
           `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
+          // Guardrail
+          `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
           // Guardrail
           `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
         ],
