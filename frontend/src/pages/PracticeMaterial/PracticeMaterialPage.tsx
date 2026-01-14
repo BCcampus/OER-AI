@@ -136,6 +136,7 @@ export default function PracticeMaterialPage() {
       num_options: formData.numOptions,
       num_cards: formData.numCards,
       card_type: formData.cardType,
+      force_fresh: formData.forceFresh || false,
     });
   };
 
