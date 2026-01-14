@@ -1835,6 +1835,19 @@ export class ApiGatewayStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnLambda_sharedUserPrompt.overrideLogicalId("sharedUserPromptFunction");
 
+    // DynamoDB table for practice material cache
+    const practiceMaterialCacheTable = new dynamodb.Table(
+      this,
+      `${id}-PracticeMaterialCache`,
+      {
+        tableName: `${id}-practice-material-cache`,
+        partitionKey: { name: "cache_key", type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        timeToLiveAttribute: "expires_at",
+      }
+    );
+
     // Practice Material Lambda (Docker)
     const practiceMaterialDockerFunc = new lambda.DockerImageFunction(
       this,
@@ -1859,6 +1872,8 @@ export class ApiGatewayStack extends cdk.Stack {
           BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
           // Guardrails
           GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
+          // DynamoDB cache table
+          CACHE_TABLE_NAME: practiceMaterialCacheTable.tableName,
         },
         role: lambdaRole,
       }
@@ -1946,6 +1961,9 @@ export class ApiGatewayStack extends cdk.Stack {
         ],
       })
     );
+
+    // DynamoDB cache permissions
+    practiceMaterialCacheTable.grantReadWriteData(practiceMaterialDockerFunc);
 
     // Create Lambda function for generating pre-signed URLs
     const presignedUrlRole = new iam.Role(this, `${id}-PresignedUrlRole`, {

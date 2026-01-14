@@ -508,6 +508,11 @@ def handler(event, context):
     if material_type == "short_answer":
         num_questions = clamp(int(body.get("num_questions", 3)), 1, 10)
 
+    # Force fresh generation (bypasses cache)
+    force_fresh = body.get("force_fresh", False)
+    if isinstance(force_fresh, str):
+        force_fresh = force_fresh.lower() == "true"
+
     # Generate cache key based on request parameters
     num_items = num_cards if material_type == "flashcard" else num_questions
     extra_params = f"{num_options}" if material_type == "mcq" else card_type if material_type == "flashcard" else ""
@@ -520,8 +525,8 @@ def handler(event, context):
         extra_params=extra_params
     )
     
-    # Check cache first
-    cached_response = get_cached_response(cache_key)
+    # Check cache first (unless force_fresh is True)
+    cached_response = None if force_fresh else get_cached_response(cache_key)
     if cached_response is not None:
         logger.info(f"Returning cached response for {material_type} on topic '{topic}'")
         response_data = {

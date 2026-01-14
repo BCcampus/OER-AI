@@ -25,6 +25,7 @@ interface GeneratePracticeMaterialParams {
     num_options?: number;
     num_cards?: number;
     card_type?: "definition" | "concept" | "example";
+    force_fresh?: boolean;
 }
 
 interface UsePracticeMaterialStreamReturn {
@@ -136,6 +137,7 @@ export const usePracticeMaterialStream = (
             num_options: params.num_options || 4,
             num_cards: params.num_cards || 10,
             card_type: params.card_type || "definition",
+            force_fresh: params.force_fresh || false,
         };
 
         console.log("[PracticeMaterialStream] Sending generate request:", message);
