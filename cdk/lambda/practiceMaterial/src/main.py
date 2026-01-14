@@ -8,6 +8,7 @@ import psycopg2.pool
 from typing import Any, Dict
 # import helpers
 from helpers.vectorstore import get_textbook_retriever
+from helpers.cache_manager import generate_cache_key, get_cached_response, set_cached_response
 from langchain_aws import BedrockEmbeddings, ChatBedrock
 # practice material grading handler
 from generators.mcq import build_mcq_prompt, validate_mcq_shape
@@ -507,6 +508,52 @@ def handler(event, context):
     if material_type == "short_answer":
         num_questions = clamp(int(body.get("num_questions", 3)), 1, 10)
 
+    # Generate cache key based on request parameters
+    num_items = num_cards if material_type == "flashcard" else num_questions
+    extra_params = f"{num_options}" if material_type == "mcq" else card_type if material_type == "flashcard" else ""
+    cache_key = generate_cache_key(
+        textbook_id=textbook_id,
+        topic=topic,
+        material_type=material_type,
+        difficulty=difficulty,
+        num_items=num_items,
+        extra_params=extra_params
+    )
+    
+    # Check cache first
+    cached_response = get_cached_response(cache_key)
+    if cached_response is not None:
+        logger.info(f"Returning cached response for {material_type} on topic '{topic}'")
+        response_data = {
+            **cached_response["result"],
+            "sources_used": cached_response["sources"],
+            "cached": True  # Indicate this was a cached response
+        }
+        
+        # Extract WebSocket context for streaming progress updates
+        request_context = event.get("requestContext") or {}
+        is_websocket = event.get("isWebSocket", False)
+        connection_id = request_context.get("connectionId") if is_websocket else None
+        domain_name = request_context.get("domainName") if is_websocket else None
+        stage = request_context.get("stage") if is_websocket else None
+        
+        # Send immediate completion via WebSocket if applicable
+        if is_websocket:
+            send_websocket_progress(connection_id, domain_name, stage, "complete", 100, data=response_data)
+            return finalize({"statusCode": 200})
+        
+        # For REST API, return full response
+        return finalize({
+            "statusCode": 200,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+            },
+            "body": json.dumps(response_data)
+        })
+
     # Extract WebSocket context for streaming progress updates
     request_context = event.get("requestContext") or {}
     is_websocket = event.get("isWebSocket", False)
@@ -675,6 +722,10 @@ def handler(event, context):
             **result,
             "sources_used": sources_used
         }
+        
+        # Store in cache for future requests
+        set_cached_response(cache_key, result, sources_used)
+        logger.info(f"Cached response for {material_type} on topic '{topic}'")
         
         # Track analytics (async, non-blocking)
         try:
