@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 
 // Validation schema for MCQ
 const mcqSchema = z.object({
@@ -62,13 +63,17 @@ const formSchema = z.discriminatedUnion("materialType", [mcqSchema, flashcardSch
 
 type FormData = z.infer<typeof formSchema>;
 
+// Extended type for form submission that includes forceFresh
+type FormDataWithForceFresh = FormData & { forceFresh: boolean };
+
 interface GenerateFormProps {
-  onGenerate: (formData: FormData) => void;
+  onGenerate: (formData: FormDataWithForceFresh) => void;
   isProcessing?: boolean;
 }
 
 export function GenerateForm({ onGenerate, isProcessing = false }: GenerateFormProps) {
   const [currentMaterialType, setCurrentMaterialType] = useState<"mcq" | "flashcards" | "shortAnswer">("mcq");
+  const [forceFresh, setForceFresh] = useState(false);
 
   const {
     control,
@@ -89,7 +94,8 @@ export function GenerateForm({ onGenerate, isProcessing = false }: GenerateFormP
   const onSubmit = (data: FormData) => {
     console.log("Form submitted with materialType:", data.materialType);
     console.log("Current state materialType:", currentMaterialType);
-    onGenerate(data);
+    console.log("Force fresh:", forceFresh);
+    onGenerate({ ...data, forceFresh });
   };
 
   // Handle material type change
@@ -190,12 +196,20 @@ export function GenerateForm({ onGenerate, isProcessing = false }: GenerateFormP
               name="topic"
               control={control}
               render={({ field }) => (
-                <Input
-                  {...field}
-                  id="topic"
-                  placeholder="Describe a topic"
-                  className={errors.topic ? "border-red-500" : ""}
-                />
+                <>
+                  <Input
+                    {...field}
+                    id="topic"
+                    placeholder="Describe a topic"
+                    maxLength={200}
+                    className={errors.topic ? "border-red-500" : ""}
+                  />
+                  {field.value && field.value.length >= 150 && (
+                    <p className={`text-xs ${field.value.length >= 200 ? "text-red-500" : "text-muted-foreground"}`}>
+                      {field.value.length}/200 characters
+                    </p>
+                  )}
+                </>
               )}
             />
             {errors.topic && (
@@ -427,6 +441,23 @@ export function GenerateForm({ onGenerate, isProcessing = false }: GenerateFormP
               </div>
             </>
           )}
+
+          {/* Force Fresh Toggle */}
+          <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
+            <div className="space-y-0.5">
+              <Label htmlFor="force-fresh" className="text-sm font-medium">
+                Generate Fresh Questions
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Bypass cache to get new questions for the same topic
+              </p>
+            </div>
+            <Switch
+              id="force-fresh"
+              checked={forceFresh}
+              onCheckedChange={setForceFresh}
+            />
+          </div>
 
           <Button type="submit" className="w-full" disabled={isSubmitting || isProcessing}>
             {isSubmitting || isProcessing ? "Generating..." : "Generate"}

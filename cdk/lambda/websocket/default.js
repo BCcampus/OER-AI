@@ -51,17 +51,36 @@ exports.handler = async (event) => {
 
     if (action === "generate_practice_material") {
       // Extract practice material specific fields
-      const { material_type, topic, difficulty, num_questions, num_options, num_cards, card_type } = body;
+      const {
+        material_type,
+        topic,
+        difficulty,
+        num_questions,
+        num_options,
+        num_cards,
+        card_type,
+        force_fresh,
+      } = body;
 
       // Validate required fields
-      if (!textbook_id || typeof textbook_id !== 'string' || textbook_id.trim() === '') {
+      if (
+        !textbook_id ||
+        typeof textbook_id !== "string" ||
+        textbook_id.trim() === ""
+      ) {
         console.log("Missing or invalid textbook_id field");
-        return { statusCode: 400, body: JSON.stringify({ error: "textbook_id is required" }) };
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: "textbook_id is required" }),
+        };
       }
 
-      if (!topic || typeof topic !== 'string' || topic.trim() === '') {
+      if (!topic || typeof topic !== "string" || topic.trim() === "") {
         console.log("Missing or invalid topic field");
-        return { statusCode: 400, body: JSON.stringify({ error: "Topic is required" }) };
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: "Topic is required" }),
+        };
       }
 
       const practicePayload = {
@@ -76,6 +95,7 @@ exports.handler = async (event) => {
           num_options: num_options || 4,
           num_cards: num_cards || 10,
           card_type: card_type || "definition",
+          force_fresh: force_fresh || false,
         }),
         httpMethod: "POST",
         resource: "/textbooks/{textbook_id}/practice_materials",
@@ -109,7 +129,7 @@ exports.handler = async (event) => {
     // Handle warmup requests - invoke practice material Lambda to pre-warm it
     if (action === "warmup") {
       console.log("Warmup request received");
-      
+
       const warmupPayload = {
         warmup: true, // Flag to trigger early return in Lambda
       };
