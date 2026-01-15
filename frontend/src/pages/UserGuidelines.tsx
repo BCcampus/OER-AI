@@ -73,7 +73,6 @@ We believe in protecting your privacy and recognizes the sensitivity of Personal
 export default function UserGuidelines() {
   const [guidelines, setGuidelines] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
-  const [hasCustomContent, setHasCustomContent] = useState(false);
 
   useEffect(() => {
     const fetchGuidelines = async () => {
@@ -86,7 +85,6 @@ export default function UserGuidelines() {
           const data = await response.json();
           if (data.userGuidelines && data.userGuidelines.trim() !== "") {
             setGuidelines(data.userGuidelines);
-            setHasCustomContent(true);
           } else {
             // Use default content if no custom guidelines
             setGuidelines(DEFAULT_GUIDELINES_CONTENT);
