@@ -8,12 +8,23 @@ import {
 import { Menu, X } from "lucide-react";
 import { useSidebar } from "@/providers/sidebar";
 import { useMode, type Mode } from "@/providers/mode";
-import { Link } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import logoImage from "@/assets/OER_logo_black.png";
 
 export default function Header() {
   const { mobileOpen, toggleMobile } = useSidebar();
   const { mode, setMode } = useMode();
+  const navigate = useNavigate();
+  const { id: textbookId } = useParams();
+
+  const handleModeChange = async (newMode: Mode) => {
+    await setMode(newMode);
+    // Navigate to chat page and reload to refresh all components
+    if (textbookId) {
+      navigate(`/textbook/${textbookId}/chat`);
+      window.location.reload();
+    }
+  };
 
   return (
     <header className="z-50 h-[70px] fixed top-0 w-screen border-b border-white/10 bg-gradient-to-r from-[#2c5f7c] to-[#3d7a9a]">
@@ -43,7 +54,7 @@ export default function Header() {
             </h1>
           </Link>
         </div>
-        <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
+        <Select value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
           <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white  [&_svg:not([class*='text-'])]:text-primary-foreground hover:bg-white/10">
             <SelectValue placeholder="Select mode" />
           </SelectTrigger>

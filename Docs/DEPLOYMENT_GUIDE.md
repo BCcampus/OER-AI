@@ -1,6 +1,7 @@
 # Deployment Guide
 
 ## Table of Contents
+
 - [Deployment Guide](#deployment-guide)
 - [Table of Contents](#table-of-contents)
 - [Requirements](#requirements)
@@ -30,9 +31,8 @@ Before you deploy, you must have the following installed on your device:
 - [AWS CLI](https://aws.amazon.com/cli/) _(v2.0.0+ required)_
 - [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/cli.html) _(v2.1022.0+ required)_
 - [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) _(v10.0.0+ required)_
-- [node](https://nodejs.org/en/ln/getting-started/how-to-install-nodejs) _(v22.7.9+ required)_
+- [node](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs) _(v22.7.9+ required)_
 - [Python](https://www.python.org/downloads/) _(v3.11+ required)_
-
 
 ### Request Higher Bedrock LLM Invocation Quotas
 
@@ -146,7 +146,7 @@ aws secretsmanager create-secret ^
 ```powershell
 aws secretsmanager create-secret `
   --name github-personal-access-token `
-  --secret-string '{"my-github-token": "<YOUR-GITHUB-TOKEN>"}' `
+  --secret-string "{`"my-github-token`": `"<YOUR-GITHUB-TOKEN>`"}" `
   --profile <YOUR-PROFILE-NAME>
 ```
 
@@ -229,7 +229,7 @@ aws secretsmanager create-secret ^
 ```powershell
 aws secretsmanager create-secret `
   --name OERSecrets `
-  --secret-string '{"DB_Username":"<YOUR-DB-USERNAME>"}' `
+  --secret-string "{`"DB_Username`":`"<YOUR-DB-USERNAME>`"}" `
   --profile <YOUR-PROFILE-NAME>
 ```
 
@@ -245,10 +245,11 @@ aws secretsmanager create-secret \
   --secret-string '{"DB_Username":"OERDatabaseUser"}' \
   --profile <YOUR-PROFILE-NAME>
 ```
+
 Finally, in order to restrict user sign up to specific email domains, you will need to upload a comma separated list of allowed email domains to Amazon SSM Parameter Store. You can do so by running the following command. Make sure you replace `<YOUR-ALLOWED-EMAIL-DOMAIN-LIST>` and `<YOUR-PROFILE-NAME>` with your actual list and the appropriate AWS profile name.
 
 <details>
-<summary>macOS</summary>
+<summary>macOS/Linux</summary>
 
 ```bash
 aws ssm put-parameter \
@@ -288,18 +289,15 @@ aws ssm put-parameter `
 
 &nbsp;
 
-For example, an email domain list we reccommend is:
+For example, an email domain list we recommend is:
 
-```
+```bash
 aws ssm put-parameter \
     --name "/OER/AllowedEmailDomains" \
     --value "gmail.com,ubc.ca,student.ubc.ca" \
     --type SecureString \
     --profile <YOUR-PROFILE-NAME>
 ```
-
-
-
 
 ### Step 3: CDK Deployment
 
@@ -347,25 +345,28 @@ cdk deploy --all \
 **Note:** The deployment process may take 15-30 minutes to complete. You will be prompted to approve IAM changes and security group modifications during deployment.
 
 ### CodePipeline & ECR Image Bootstrapping (First-Time Deployment)
+
 During the first-time deployment of the API stack, the deployment may fail because the required Docker images for Lambda functions have not yet been built and pushed to ECR. This happens because CodePipeline/CodeBuild is responsible for creating the ECR repositories and building the images, but these processes are not completed before the stack attempts to reference the images.
 
 To resolve this issue, follow one of these approaches:
 
 #### Manually Trigger the Pipeline Build (Recommended):
 
-- Go to the AWS Console → CodePipeline → select your pipeline `<STACK-PREFIX>-pipeline` → click `Release change` or `Start pipeline`.
-- Alternatively, use the AWS CLI to start the pipeline:
-Wait for the Pipeline to Complete and Redeploy:
+1. Go to the AWS Console → CodePipeline → select your pipeline `<STACK-PREFIX>-pipeline` → click `Release change` or `Start pipeline`.
+2. Wait for the Pipeline to complete the build and push the required Docker images to ECR.
+3. Once the images are available, redeploy the API stack to ensure the Lambdas can reference the images.
 
-- Allow CodePipeline to complete the build and push the required Docker images to ECR.
-Once the images are available, redeploy the API stack to ensure the Lambdas can reference the images.
-- Notes:
-  - Verify the ECR repository names and tags in the AWS Console or CDK outputs to ensure they match the expected values.
-After the pipeline successfully completes and the images are pushed, the API stack should deploy successfully, and the Lambdas will function as expected.
-- Troubleshooting:
-  - Check the CodePipeline and CodeBuild logs for any errors during the build process.
-  - Verify that the required images and tags are present in ECR.
-  - Ensure that the IAM roles for CodePipeline and CodeBuild have the necessary permissions to push images to ECR and access the repositories.
+**Notes:**
+
+- Verify the ECR repository names and tags in the AWS Console or CDK outputs to ensure they match the expected values.
+- After the pipeline successfully completes and the images are pushed, the API stack should deploy successfully.
+
+**Troubleshooting:**
+
+- Check the CodePipeline and CodeBuild logs for any errors during the build process.
+- Verify that the required images and tags are present in ECR.
+- Ensure that the IAM roles for CodePipeline and CodeBuild have the necessary permissions to push images to ECR.
+
 ## Post-Deployment
 
 ### Step 1: Build AWS Amplify App
@@ -406,29 +407,34 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
 ### Common Issues
 
 **Issue: CDK deployment fails with "Resource already exists"**
+
 - Solution: Check if you have existing resources with the same names. Either delete them or use a different stack prefix.
 
 **Issue: CloudFormation validation error during ResourceExistenceCheck referencing DataPipeline or CICD ARNs**
-- Symptoms: CloudFormation throws a validation error during the change set or deployment phase, related to a `ResourceExistenceCheck` for an ARN that appears to reference the `DataPipeline` or `CICD` resources. This commonly occurs on first-time deployments when the pipeline and ECR resources are created by the deployment but are referenced in IAM policy statements or other policies before they exist.
 
+- Symptoms: CloudFormation throws a validation error during the change set or deployment phase, related to a `ResourceExistenceCheck` for an ARN that appears to reference the `DataPipeline` or `CICD` resources.
+- Solution: This commonly occurs on first-time deployments when the pipeline and ECR resources are created by the deployment but are referenced in IAM policy statements before they exist. Follow the [CodePipeline & ECR Image Bootstrapping](#codepipeline--ecr-image-bootstrapping-first-time-deployment) steps to manually trigger the pipeline build and redeploy.
 
 **Issue: Amplify build fails**
+
 - Solution: Check the build logs in Amplify console. Common causes:
   - Missing environment variables
   - Node version mismatch
   - Dependency installation failures
 
 **Issue: Database connection errors**
+
 - Solution: Verify that:
   - RDS instance is running
   - Security groups allow Lambda to access RDS
   - Database credentials are correct in Secrets Manager
 
-
 **Issue: CORS errors in browser**
+
 - Solution: Verify that the API Gateway CORS configuration includes your Amplify domain
 
 **Issue: WebSocket connection fails**
+
 - Solution: Check that:
   - WebSocket API is deployed
   - Lambda functions have correct permissions
@@ -470,6 +476,7 @@ To take down the deployed stack for a fresh redeployment in the future, follow t
    - Navigate to AWS Systems Manager → Parameter Store
    - Delete the following parameters:
      - `oer-owner-name`
+     - `/OER/AllowedEmailDomains`
      - Any other parameters created by the stack
 
 5. **Delete ECR Repositories** (if any were created):
@@ -484,6 +491,7 @@ To take down the deployed stack for a fresh redeployment in the future, follow t
 **Note:** Please wait for each stack to be properly deleted before deleting the next stack. Some resources have dependencies that must be removed first.
 
 **Cost Warning:** Ensure all resources are deleted to avoid ongoing charges. Pay special attention to:
+
 - RDS instances
 - NAT Gateways
 - Elastic IPs
