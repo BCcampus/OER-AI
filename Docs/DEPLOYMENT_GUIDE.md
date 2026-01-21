@@ -7,15 +7,15 @@
 - [Requirements](#requirements)
   - [Request Higher Bedrock LLM Invocation Quotas](#request-higher-bedrock-llm-invocation-quotas)
 - [Pre-Deployment](#pre-deployment)
-  - [Create GitHub Personal Access Token](#create-github-personal-access-token)
 - [Deployment](#deployment)
   - [Step 1: Fork \& Clone The Repository](#step-1-fork--clone-the-repository)
   - [Step 2: Upload Secrets](#step-2-upload-secrets)
   - [Step 3: CDK Deployment](#step-3-cdk-deployment)
 - [Post-Deployment](#post-deployment)
-  - [Step 1: Build AWS Amplify App](#step-1-build-aws-amplify-app)
-  - [Step 2: Configure Admin User](#step-2-configure-admin-user)
-  - [Step 3: Visit Web App](#step-3-visit-web-app)
+  - [Step 1: Authorize GitHub Connection](#step-1-authorize-github-connection)
+  - [Step 2: Connect Amplify to Repository](#step-2-connect-amplify-to-repository)
+  - [Step 3: Configure Admin User](#step-3-configure-admin-user)
+  - [Step 4: Visit Web App](#step-4-visit-web-app)
 - [Troubleshooting](#troubleshooting)
   - [Common Issues](#common-issues)
 - [Cleanup](#cleanup)
@@ -54,13 +54,8 @@ _Note: Consider your expected concurrent users and document processing volume wh
 
 ## Pre-Deployment
 
-### Create GitHub Personal Access Token
-
-To deploy this solution, you will need to generate a GitHub personal access token. Please visit [here](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) for detailed instruction to create a personal access token.
-
-_Note: Make sure to give access to only OER-AI repository. Enable Read-only for Contents, and Metadata. For webhooks and Commit statuses enable read and write permissions._
-
-**Once you create a token, please note down its value as you will use it later in the deployment process.**
+> [!NOTE]
+> This deployment uses **GitHub Apps** (via AWS CodeStar Connections) for secure repository access. You do **not** need to create a GitHub Personal Access Token. The GitHub connection will be authorized in the AWS Console after deployment.
 
 ## Deployment
 
@@ -114,47 +109,7 @@ npm install
 
 ### Step 2: Upload Secrets
 
-You would have to supply your GitHub personal access token you created earlier when deploying the solution. Run the following command and ensure you replace `<YOUR-GITHUB-TOKEN>` and `<YOUR-PROFILE-NAME>` with your actual GitHub token and the appropriate AWS profile name.
-
-<details>
-<summary>macOS/Linux</summary>
-
-```bash
-aws secretsmanager create-secret \
-  --name github-personal-access-token \
-  --secret-string '{"my-github-token": "<YOUR-GITHUB-TOKEN>"}' \
-  --profile <YOUR-PROFILE-NAME>
-```
-
-</details>
-
-<details>
-<summary>Windows CMD</summary>
-
-```cmd
-aws secretsmanager create-secret ^
-  --name github-personal-access-token ^
-  --secret-string "{\"my-github-token\": \"<YOUR-GITHUB-TOKEN>\"}" ^
-  --profile <YOUR-PROFILE-NAME>
-```
-
-</details>
-
-<details>
-<summary>PowerShell</summary>
-
-```powershell
-aws secretsmanager create-secret `
-  --name github-personal-access-token `
-  --secret-string '{\"my-github-token\": \"<YOUR-GITHUB-TOKEN>\"}' `
-  --profile <YOUR-PROFILE-NAME>
-```
-
-</details>
-
-&nbsp;
-
-Moreover, you will need to upload your GitHub username to Amazon SSM Parameter Store. You can do so by running the following command. Make sure you replace `<YOUR-GITHUB-USERNAME>` and `<YOUR-PROFILE-NAME>` with your actual username and the appropriate AWS profile name.
+You need to upload your GitHub username to Amazon SSM Parameter Store. Run the following command, replacing `<YOUR-GITHUB-USERNAME>` and `<YOUR-PROFILE-NAME>` with your actual username and the appropriate AWS profile name.
 
 <details>
 <summary>macOS/Linux</summary>
