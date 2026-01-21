@@ -58,7 +58,7 @@ export class AmplifyStack extends cdk.Stack {
       this,
       "AmplifyGitHubConnection",
       {
-        connectionName: `${id}-gh-conn`,
+        connectionName: `${id}-amplify-github-connection`,
         providerType: "GitHub",
       }
     );
