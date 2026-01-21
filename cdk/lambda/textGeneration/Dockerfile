@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.11 as builder
+FROM public.ecr.aws/lambda/python:3.12 as builder
 
 # Update glib2 for CVE-2025-13601 mitigation (dnf in AL2023, fallback to yum)
 RUN if command -v dnf >/dev/null 2>&1; then \
@@ -22,7 +22,7 @@ WORKDIR /opt
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --target /opt/python -r requirements.txt
 
-FROM public.ecr.aws/lambda/python:3.11
+FROM public.ecr.aws/lambda/python:3.12
 
 # Update glib2 in the runtime image as well
 RUN if command -v dnf >/dev/null 2>&1; then \

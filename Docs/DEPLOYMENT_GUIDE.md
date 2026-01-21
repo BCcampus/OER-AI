@@ -32,7 +32,7 @@ Before you deploy, you must have the following installed on your device:
 - [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/cli.html) _(v2.1022.0+ required)_
 - [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) _(v10.0.0+ required)_
 - [node](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs) _(v22.7.9+ required)_
-- [Python](https://www.python.org/downloads/) _(v3.11+ required)_
+- [Python](https://www.python.org/downloads/) _(v3.12+ required)_
 
 ### Request Higher Bedrock LLM Invocation Quotas
 
