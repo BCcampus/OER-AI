@@ -7,15 +7,15 @@
 - [Requirements](#requirements)
   - [Request Higher Bedrock LLM Invocation Quotas](#request-higher-bedrock-llm-invocation-quotas)
 - [Pre-Deployment](#pre-deployment)
+  - [Create GitHub Personal Access Token](#create-github-personal-access-token)
 - [Deployment](#deployment)
   - [Step 1: Fork \& Clone The Repository](#step-1-fork--clone-the-repository)
   - [Step 2: Upload Secrets](#step-2-upload-secrets)
   - [Step 3: CDK Deployment](#step-3-cdk-deployment)
 - [Post-Deployment](#post-deployment)
-  - [Step 1: Authorize GitHub Connection](#step-1-authorize-github-connection)
-  - [Step 2: Connect Amplify to Repository](#step-2-connect-amplify-to-repository)
-  - [Step 3: Configure Admin User](#step-3-configure-admin-user)
-  - [Step 4: Visit Web App](#step-4-visit-web-app)
+  - [Step 1: Build AWS Amplify App](#step-1-build-aws-amplify-app)
+  - [Step 2: Configure Admin User](#step-2-configure-admin-user)
+  - [Step 3: Visit Web App](#step-3-visit-web-app)
 - [Troubleshooting](#troubleshooting)
   - [Common Issues](#common-issues)
 - [Cleanup](#cleanup)
@@ -54,8 +54,13 @@ _Note: Consider your expected concurrent users and document processing volume wh
 
 ## Pre-Deployment
 
-> [!NOTE]
-> This deployment uses **GitHub Apps** (via AWS CodeStar Connections) for secure repository access. You do **not** need to create a GitHub Personal Access Token. The GitHub connection will be authorized in the AWS Console after deployment.
+### Create GitHub Personal Access Token
+
+To deploy this solution, you will need to generate a GitHub personal access token. Please visit [here](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) for detailed instruction to create a personal access token.
+
+_Note: Make sure to give access to only OER-AI repository. Enable Read-only for Contents, and Metadata. For webhooks and Commit statuses enable read and write permissions._
+
+**Once you create a token, please note down its value as you will use it later in the deployment process.**
 
 ## Deployment
 
@@ -109,7 +114,47 @@ npm install
 
 ### Step 2: Upload Secrets
 
-You need to upload your GitHub username to Amazon SSM Parameter Store. Run the following command, replacing `<YOUR-GITHUB-USERNAME>` and `<YOUR-PROFILE-NAME>` with your actual username and the appropriate AWS profile name.
+You would have to supply your GitHub personal access token you created earlier when deploying the solution. Run the following command and ensure you replace `<YOUR-GITHUB-TOKEN>` and `<YOUR-PROFILE-NAME>` with your actual GitHub token and the appropriate AWS profile name.
+
+<details>
+<summary>macOS/Linux</summary>
+
+```bash
+aws secretsmanager create-secret \
+  --name github-personal-access-token \
+  --secret-string '{"my-github-token": "<YOUR-GITHUB-TOKEN>"}' \
+  --profile <YOUR-PROFILE-NAME>
+```
+
+</details>
+
+<details>
+<summary>Windows CMD</summary>
+
+```cmd
+aws secretsmanager create-secret ^
+  --name github-personal-access-token ^
+  --secret-string "{\"my-github-token\": \"<YOUR-GITHUB-TOKEN>\"}" ^
+  --profile <YOUR-PROFILE-NAME>
+```
+
+</details>
+
+<details>
+<summary>PowerShell</summary>
+
+```powershell
+aws secretsmanager create-secret `
+  --name github-personal-access-token `
+  --secret-string '{\"my-github-token\": \"<YOUR-GITHUB-TOKEN>\"}' `
+  --profile <YOUR-PROFILE-NAME>
+```
+
+</details>
+
+&nbsp;
+
+Moreover, you will need to upload your GitHub username to Amazon SSM Parameter Store. You can do so by running the following command. Make sure you replace `<YOUR-GITHUB-USERNAME>` and `<YOUR-PROFILE-NAME>` with your actual username and the appropriate AWS profile name.
 
 <details>
 <summary>macOS/Linux</summary>
@@ -324,33 +369,16 @@ To resolve this issue, follow one of these approaches:
 
 ## Post-Deployment
 
-### Step 1: Authorize GitHub Connection
+### Step 1: Build AWS Amplify App
 
-After CDK deployment, you need to authorize the GitHub connection:
+1. Log in to AWS console, and navigate to **AWS Amplify**. You can do so by typing `Amplify` in the search bar at the top.
+2. From `All apps`, click `<STACK-PREFIX>-amplify`.
+3. You will see multiple branches listed (`main`, `dev`, `api_endpoint_setup`). Click on the branch that corresponds to your GitHub repository's default branch (typically `main`).
+4. Click `Redeploy this version` to trigger a build
+5. Wait for the build to complete (this may take 5-10 minutes)
+6. You now have access to the `Amplify App ID` and the public domain name to use the web app.
 
-1. Navigate to **AWS Developer Tools Console** → **Connections** (or search for "CodeStar Connections")
-2. Find the connection named `<STACK-PREFIX>-Amplify-amplify-github-connection`
-3. The status will show **Pending** - click on the connection
-4. Click **Update pending connection**
-5. Click **Install a new app** to install the AWS Connector for GitHub
-6. Sign in to GitHub and authorize AWS to access your forked OER-AI repository
-7. The connection status should change to **Available**
-
-> [!IMPORTANT]
-> Also authorize the CICD connection (`<STACK-PREFIX>-CICD-github-connection`) for the Docker build pipeline.
-
-### Step 2: Connect Amplify to Repository
-
-1. Navigate to **AWS Amplify Console** (search for "Amplify")
-2. Click on your app `<STACK-PREFIX>-amplify`
-3. Click **Hosting** → **Connect a repository** (or in App settings)
-4. Choose **GitHub** as the source
-5. Select the connection you authorized in Step 1
-6. Select your forked `OER-AI` repository and the `main` branch
-7. Click **Save and deploy**
-8. Wait for the build to complete (5-10 minutes)
-
-### Step 3: Configure Admin User
+### Step 2: Configure Admin User
 
 To create an admin user for accessing the admin dashboard:
 
@@ -368,7 +396,7 @@ To create an admin user for accessing the admin dashboard:
 9. Select the "admin" group
 10. On first login, you'll be prompted to change your password
 
-### Step 4: Visit Web App
+### Step 3: Visit Web App
 
 You can now navigate to the web app URL (found in the Amplify console) to see your application in action.
 
@@ -440,25 +468,22 @@ To take down the deployed stack for a fresh redeployment in the future, follow t
 3. **Delete Secrets:**
    - Navigate to AWS Secrets Manager
    - Delete the following secrets:
+     - `github-personal-access-token`
      - `OERSecrets`
      - Any database credentials created by the stack
 
-4. **Delete GitHub Connections:**
-   - Navigate to **AWS Developer Tools** → **Connections**
-   - Delete the connections created by the stack
-
-5. **Delete SSM Parameters:**
+4. **Delete SSM Parameters:**
    - Navigate to AWS Systems Manager → Parameter Store
    - Delete the following parameters:
      - `oer-owner-name`
      - `/OER/AllowedEmailDomains`
      - Any other parameters created by the stack
 
-6. **Delete ECR Repositories** (if any were created):
+5. **Delete ECR Repositories** (if any were created):
    - Navigate to Amazon ECR
    - Delete repositories created by the stack
 
-7. **Verify Cleanup**:
+6. **Verify Cleanup**:
    - Check CloudWatch Logs for any remaining log groups
    - Check Lambda functions for any remaining functions
    - Check API Gateway for any remaining APIs

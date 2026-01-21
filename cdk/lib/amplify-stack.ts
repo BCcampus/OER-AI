@@ -1,6 +1,10 @@
+import {
+  App,
+  GitHubSourceCodeProvider,
+  RedirectStatus,
+} from "@aws-cdk/aws-amplify-alpha";
 import * as cdk from "aws-cdk-lib";
-import * as amplify from "aws-cdk-lib/aws-amplify";
-import * as codeconnections from "aws-cdk-lib/aws-codeconnections";
+import { BuildSpec } from "aws-cdk-lib/aws-codebuild";
 import { Construct } from "constructs";
 import * as yaml from "yaml";
 import { ApiGatewayStack } from "./api-stack";
@@ -21,113 +25,75 @@ export class AmplifyStack extends cdk.Stack {
 
     const githubRepoName = props.githubRepo;
 
-    const amplifyYaml = yaml.stringify({
-      version: 1,
-      applications: [
-        {
-          appRoot: "frontend",
-          frontend: {
-            phases: {
-              preBuild: {
-                commands: ["pwd", "npm ci"],
-              },
-              build: {
-                commands: ["npm run build"],
-              },
-            },
-            artifacts: {
-              baseDirectory: "dist",
-              files: ["**/*"],
-            },
-            cache: {
-              paths: ["node_modules/**/*"],
-            },
-          },
-        },
-      ],
-    });
+    const amplifyYaml = yaml.parse(` 
+      version: 1
+      applications:
+        - appRoot: frontend
+          frontend:
+            phases:
+              preBuild:
+                commands:
+                  - pwd
+                  - npm ci
+              build:
+                commands:
+                  - npm run build
+            artifacts:
+              baseDirectory: dist
+              files:
+                - '**/*'
+            cache:
+              paths:
+                - 'node_modules/**/*'
+            redirects:
+              - source: </^[^.]+$|.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>
+                target: /
+                status: 404
+    `);
 
     const username = cdk.aws_ssm.StringParameter.valueForStringParameter(
       this,
       "oer-owner-name"
     );
 
-    // Create GitHub connection using CodeStar Connections (GitHub App)
-    // This connection must be authorized in the AWS Console after deployment
-    const githubConnection = new codeconnections.CfnConnection(
-      this,
-      "AmplifyGitHubConnection",
-      {
-        connectionName: `${id}-amplify-github-connection`,
-        providerType: "GitHub",
-      }
-    );
+    const amplifyApp = new App(this, `${id}-amplifyApp`, {
+      appName: `${id}-amplify`,
+      sourceCodeProvider: new GitHubSourceCodeProvider({
+        owner: username,
+        repository: githubRepoName,
+        oauthToken: cdk.SecretValue.secretsManager(
+          "github-personal-access-token",
+          {
+            jsonField: "my-github-token",
+          }
+        ),
+      }),
+      environmentVariables: {
+        VITE_AWS_REGION: this.region,
+        VITE_COGNITO_USER_POOL_ID: apiStack.getUserPoolId(),
+        VITE_COGNITO_USER_POOL_CLIENT_ID: apiStack.getUserPoolClientId(),
+        VITE_API_ENDPOINT: apiStack.getEndpointUrl(),
+        VITE_IDENTITY_POOL_ID: apiStack.getIdentityPoolId(),
+        VITE_WEBSOCKET_URL: `${apiStack.getWebSocketUrl()}/${apiStack.getStageName() ?? ""
+          }`,
+      },
+      buildSpec: BuildSpec.fromObjectToYaml(amplifyYaml),
+    });
 
-    // Create Amplify app without repository - user connects via console after authorizing connection
-    // This approach uses GitHub Apps instead of Personal Access Tokens for better security
-    const amplifyApp = new amplify.CfnApp(this, "AmplifyApp", {
-      name: `${id}-amplify`,
-      platform: "WEB",
-      buildSpec: amplifyYaml,
-      environmentVariables: [
-        { name: "VITE_AWS_REGION", value: this.region },
-        { name: "VITE_COGNITO_USER_POOL_ID", value: apiStack.getUserPoolId() },
-        {
-          name: "VITE_COGNITO_USER_POOL_CLIENT_ID",
-          value: apiStack.getUserPoolClientId(),
-        },
-        { name: "VITE_API_ENDPOINT", value: apiStack.getEndpointUrl() },
-        { name: "VITE_IDENTITY_POOL_ID", value: apiStack.getIdentityPoolId() },
-        {
-          name: "VITE_WEBSOCKET_URL",
-          value: `${apiStack.getWebSocketUrl()}/${apiStack.getStageName() ?? ""}`,
-        },
-      ],
-      customRules: [
-        {
-          source: "/<*>",
-          target: "/index.html",
-          status: "404-200",
-        },
-      ],
+    amplifyApp.addCustomRule({
+      source: "/<*>",
+      target: "	/index.html",
+      status: RedirectStatus.NOT_FOUND_REWRITE,
     });
 
     // Add main branch
-    const mainBranch = new amplify.CfnBranch(this, "MainBranch", {
-      appId: amplifyApp.attrAppId,
-      branchName: "main",
-      enableAutoBuild: true,
-      stage: "PRODUCTION",
-    });
+    amplifyApp.addBranch("main");
 
     // Add feature branch if specified and not main
     const branch = props.githubBranch ?? "main";
     if (branch !== "main") {
-      new amplify.CfnBranch(this, "FeatureBranch", {
-        appId: amplifyApp.attrAppId,
-        branchName: branch,
-        enableAutoBuild: true,
-        stage: "DEVELOPMENT",
-      });
+      amplifyApp.addBranch(branch);
     }
 
-    amplifyApp.node.addDependency(githubConnection);
-
-    // Outputs for post-deployment configuration
-    new cdk.CfnOutput(this, "AmplifyAppId", {
-      value: amplifyApp.attrAppId,
-      description: "Amplify App ID",
-    });
-
-    new cdk.CfnOutput(this, "GitHubConnectionArn", {
-      value: githubConnection.attrConnectionArn,
-      description:
-        "GitHub Connection ARN - authorize this in AWS Console > Developer Tools > Connections",
-    });
-
-    new cdk.CfnOutput(this, "AmplifyConsoleUrl", {
-      value: `https://${this.region}.console.aws.amazon.com/amplify/home?region=${this.region}#/${amplifyApp.attrAppId}`,
-      description: "Link to Amplify Console to connect repository",
-    });
   }
 }
