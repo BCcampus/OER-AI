@@ -148,7 +148,7 @@ def initialize_embeddings_and_vectorstore(textbook_id, textbook_title):
             logger.info(f"Initializing Bedrock embeddings with model: {EMBEDDING_MODEL_ID}")
             embeddings = BedrockEmbeddings(
                 model_id=EMBEDDING_MODEL_ID,
-                region_name='us-east-1',
+                region_name=args['region_name'],
                 model_kwargs = {"input_type": "search_document"}
             )
             logger.info("Bedrock embeddings initialized successfully")
