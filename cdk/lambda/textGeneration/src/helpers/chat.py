@@ -729,7 +729,7 @@ def get_response(
         
         # Get relevant documents from retriever
         logger.info("Retrieving relevant documents...")
-        docs = retriever.get_relevant_documents(query)
+        docs = retriever.invoke(query)
         logger.info(f"Retrieved {len(docs)} documents")
         
         if not docs:

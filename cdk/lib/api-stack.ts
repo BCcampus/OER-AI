@@ -929,8 +929,8 @@ export class ApiGatewayStack extends cdk.Stack {
       "EmbeddingModelParameter",
       {
         parameterName: `/${id}/OER/EmbeddingModelId`,
-        description: "Parameter containing the Embedding Model ID",
-        stringValue: "us.cohere.embed-v4:0",
+        description: "Parameter containing the Embedding Model ID (inference profile for cross-region)",
+        stringValue: "us.cohere.embed-v4:0",  // US inference profile for cross-region routing
       }
     );
 
@@ -1270,13 +1270,14 @@ export class ApiGatewayStack extends cdk.Stack {
         "bedrock:ApplyGuardrail",
       ],
       resources: [
-        /* Nova Pro inference profile
-        `arn:aws:bedrock:us-east-1:784303385514:inference-profile/us.amazon.nova-pro-v1:0`,
-        // Nova Pro foundation model (what ChatBedrock actually calls)
-        `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0`,
-        */
+        // LLM model (Llama 3)
         `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
+        // Cohere Embed v4 - Cross-Region Inference Profile (allows routing from ca-central-1)
+        `arn:aws:bedrock:${this.region}::inference-profile/us.cohere.embed-v4:0`,
+        // Also allow the foundation model in destination regions (us-east-1, us-east-2, us-west-2)
         `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
+        `arn:aws:bedrock:us-east-2::foundation-model/cohere.embed-v4:0`,
+        `arn:aws:bedrock:us-west-2::foundation-model/cohere.embed-v4:0`,
         // Guardrail
         `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
       ],
