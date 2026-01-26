@@ -679,6 +679,48 @@ def get_response_streaming(
             "sources_used": []
         }
 
+def get_chat_history(chat_session_id: str) -> list:
+    """
+    Retrieve chat history from DynamoDB for a given session.
+    
+    Args:
+        chat_session_id: The session ID to retrieve history for
+        
+    Returns:
+        List of formatted message dictionaries
+    """
+    if not chat_session_id:
+        return []
+        
+    try:
+        chat_history = DynamoDBChatMessageHistory(
+            table_name=TABLE_NAME,
+            session_id=chat_session_id
+        )
+        
+        formatted_messages = []
+        for msg in chat_history.messages:
+            # Map LangChain message types to frontend roles
+            role = "user" if msg.type == "human" else "assistant"
+            
+            # Skip system messages if any
+            if msg.type == "system":
+                continue
+                
+            formatted_messages.append({
+                "role": role,
+                "content": msg.content
+            })
+            
+        logger.info(f"Retrieved {len(formatted_messages)} messages for session {chat_session_id}")
+        return formatted_messages
+        
+    except Exception as e:
+        logger.error(f"Error retrieving chat history: {e}")
+        # Return empty list on error to allow UI to load explaining error
+        return []
+
+
 def get_response(
     query: str,
     textbook_id: str,

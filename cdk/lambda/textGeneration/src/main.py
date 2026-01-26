@@ -833,6 +833,37 @@ def handler(event, context):
             raise ConfigurationError(f"Configuration error: {str(e)}")
 
         # 2. Parse & Validate Request
+        # Route GET requests to history handler immediately
+        http_method = event.get("httpMethod", "")
+        if http_method == "GET":
+            logger.info("Processing GET request for chat history")
+            chat_session_id = event.get("pathParameters", {}).get("id")
+            
+            if not chat_session_id:
+                return finalize({
+                    "statusCode": 400,
+                    "headers": {
+                        "Content-Type": "application/json", 
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Headers": "*"
+                    },
+                    "body": json.dumps({"error": "Missing session ID"})
+                })
+                
+            from helpers.chat import get_chat_history
+            history = get_chat_history(chat_session_id)
+            
+            return finalize({
+                "statusCode": 200, 
+                "headers": {
+                    "Content-Type": "application/json", 
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "*"
+                },
+                "body": json.dumps(history)
+            })
+
+        # POST Request Logic (Generation)
         question, textbook_id, chat_session_id, is_websocket, connection_id, websocket_endpoint = parse_and_validate_request(event)
 
         # 3. Security: Sanitize Session ID
