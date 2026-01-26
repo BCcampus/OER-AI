@@ -930,7 +930,7 @@ export class ApiGatewayStack extends cdk.Stack {
       {
         parameterName: `/${id}/OER/EmbeddingModelId`,
         description: "Parameter containing the Embedding Model ID",
-        stringValue: "cohere.embed-v4:0",
+        stringValue: "us.cohere.embed-v4:0",
       }
     );
 

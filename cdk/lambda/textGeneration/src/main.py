@@ -184,7 +184,7 @@ def get_bedrock_runtime():
     if _bedrock_runtime is None:
         import boto3
         # Use us-east-1 as default; in practice BEDROCK_REGION from SSM is used
-        _bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
+        _bedrock_runtime = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
         logger.info("Bedrock runtime client initialized")
     return _bedrock_runtime
 
@@ -203,7 +203,7 @@ def get_embeddings():
         _embeddings = BedrockEmbeddings(
             model_id=EMBEDDING_MODEL_ID,
             client=bedrock_runtime,
-            region_name='us-east-1',
+            region_name=BEDROCK_REGION,
             model_kwargs={"input_type": "search_document"}
         )
         logger.info(f"Initialized embeddings with model: {EMBEDDING_MODEL_ID}")
