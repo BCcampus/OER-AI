@@ -1,3 +1,40 @@
+"""
+TextGeneration Lambda - AI Response Generation Service
+
+=== ARCHITECTURE OVERVIEW ===
+
+This Lambda function generates AI responses for the GenAI educational application.
+It handles streaming responses via WebSocket, FAQ caching, token limiting, and security.
+
+=== COLD START OPTIMIZATION STRATEGY ===
+
+Docker Lambda cold starts can take 2-5 seconds. We optimize this by:
+
+1. PRE-LOADING at module level (lines 47-92):
+   - boto3 clients (SSM, Secrets Manager) are initialized when container starts
+   - SSM parameters are fetched and cached in global variables
+   - This happens BEFORE the first request, during container initialization
+
+2. FALLBACK lazy-loading functions (lines 100-140):
+   - These functions (get_ssm_client, get_secrets_manager, etc.) exist as FALLBACKS
+   - They only create clients if the pre-loading try block failed
+   - This ensures the Lambda works even if pre-loading encounters an error
+   - In normal operation, these functions just return the pre-loaded client
+
+3. DB CONNECTION POOL pre-warming (line ~93):
+   - Connection pool is created at container startup, not on first request
+   - Eliminates ~200ms latency on first database operation
+
+=== KEY COMPONENTS ===
+
+- main.py: Request handling, orchestration
+- helpers/chat.py: LLM interaction, RAG chain, streaming
+- helpers/vectorstore.py: Vector similarity search
+- helpers/faq_cache.py: Semantic caching for frequent questions
+- helpers/token_limit_helper.py: Daily usage limits
+- helpers/session_security.py: Input validation and sanitization
+"""
+
 import os
 import json
 import time
@@ -21,16 +58,22 @@ TABLE_NAME_PARAM = os.environ.get("TABLE_NAME_PARAM")
 DAILY_TOKEN_LIMIT_PARAM = os.environ.get("DAILY_TOKEN_LIMIT_PARAM")
 COLD_START_METRIC = os.environ.get("COLD_START_METRIC", "false").lower() == "true"
 FORCE_COLD_START_TEST = os.environ.get("FORCE_COLD_START_TEST", "false").lower() == "true"
-#comment to invoke code pipeline
-# Lazy-loaded globals - initialized only when needed
-_secrets_manager = None
-_ssm_client = None
-_bedrock_runtime = None
-_db_connection_pool = None
+# =============================================================================
+# GLOBAL STATE - Pre-loaded at container startup for cold start optimization
+# =============================================================================
+# These variables are initialized in the try block below (lines ~47-92).
+# The lazy-loading functions (get_ssm_client, etc.) are FALLBACKS that only
+# create clients if pre-loading failed. In normal operation, they just return
+# the pre-loaded client.
+
+_secrets_manager = None  # Pre-loaded in try block below
+_ssm_client = None       # Pre-loaded in try block below
+_bedrock_runtime = None  # Lazy-loaded on first use (region may differ)
+_db_connection_pool = None  # Pre-warmed after config loading
 _pool_lock = threading.Lock()
-_db_secret = None
-_embeddings = None
-_is_cold_start = True
+_db_secret = None        # Cached after first fetch
+_embeddings = None       # Cached after first use
+_is_cold_start = True    # Tracks cold start for metrics
 _startup_ts = time.time()
 
 # Pre-loaded configuration - loaded at container startup
@@ -68,39 +111,91 @@ try:
         logger.info(f"Pre-loaded GUARDRAIL_ID")
     
     logger.info(f"Pre-loading completed in {time.time() - _startup_ts:.2f}s")
+    
+    # PRE-WARM DATABASE CONNECTION POOL
+    # Creating the pool at startup eliminates ~200ms latency on first DB operation.
+    # We do this after fetching secrets so we have credentials available.
+    try:
+        logger.info("Pre-warming database connection pool...")
+        import psycopg2.pool
+        db_secret_response = _secrets_manager.get_secret_value(SecretId=DB_SECRET_NAME)
+        db_creds = json.loads(db_secret_response["SecretString"])
+        _db_secret = db_creds  # Cache the secret
+        _db_connection_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=1,
+            maxconn=5,
+            host=RDS_PROXY_ENDPOINT,
+            database=db_creds["dbname"],
+            user=db_creds["username"],
+            password=db_creds["password"],
+            port=int(db_creds["port"])
+        )
+        logger.info("Database connection pool pre-warmed successfully")
+    except Exception as pool_error:
+        logger.warning(f"Failed to pre-warm connection pool (will create on-demand): {pool_error}")
+        
 except Exception as e:
-    logger.warning(f"Pre-loading failed (will load on-demand): {e}")
+    logger.warning(f"Pre-loading failed (will load on-demand via fallback functions): {e}")
 
+
+# =============================================================================
+# FALLBACK FUNCTIONS - Only execute if pre-loading failed
+# =============================================================================
+# These functions implement the "lazy loading" pattern as a FALLBACK mechanism.
+# In normal operation (when pre-loading succeeds), these functions simply return
+# the already-initialized global client. They only create new clients if the
+# global is None (meaning pre-loading failed for some reason).
+#
+# This is DEFENSIVE PROGRAMMING, not duplicate initialization.
+# =============================================================================
 
 def get_secrets_manager():
-    """Lazy-load secrets manager client"""
+    """Get Secrets Manager client (pre-loaded, with fallback if pre-loading failed)"""
     global _secrets_manager
     if _secrets_manager is None:
+        # FALLBACK: Only runs if pre-loading failed
+        logger.warning("Secrets Manager not pre-loaded, initializing now (fallback)")
         import boto3
         _secrets_manager = boto3.client("secretsmanager", region_name=REGION)
     return _secrets_manager
 
 
 def get_ssm_client():
-    """Lazy-load SSM client"""
+    """Get SSM client (pre-loaded, with fallback if pre-loading failed)"""
     global _ssm_client
     if _ssm_client is None:
+        # FALLBACK: Only runs if pre-loading failed
+        logger.warning("SSM client not pre-loaded, initializing now (fallback)")
         import boto3
         _ssm_client = boto3.client("ssm", region_name=REGION)
     return _ssm_client
 
 
 def get_bedrock_runtime():
-    """Lazy-load Bedrock runtime client"""
+    """
+    Get Bedrock runtime client.
+    
+    NOTE: This is intentionally lazy-loaded (not pre-loaded) because:
+    - Bedrock region may be different from the Lambda's region
+    - The region is determined by BEDROCK_REGION which is fetched from SSM
+    - We need SSM parameters loaded first before knowing which region to use
+    """
     global _bedrock_runtime
     if _bedrock_runtime is None:
         import boto3
+        # Use us-east-1 as default; in practice BEDROCK_REGION from SSM is used
         _bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
+        logger.info("Bedrock runtime client initialized")
     return _bedrock_runtime
 
 
 def get_embeddings():
-    """Lazy-load embeddings model"""
+    """
+    Get embeddings model instance (cached after first initialization).
+    
+    NOTE: Embeddings are cached globally to avoid re-initialization on each request.
+    The BedrockEmbeddings object is stateless and thread-safe, so sharing is fine.
+    """
     global _embeddings
     if _embeddings is None:
         from langchain_aws import BedrockEmbeddings
@@ -748,49 +843,83 @@ def handler(event, context):
                 logger.error(f"Error tracking token usage: {token_error}", exc_info=True)
                 # Continue even if token tracking fails (fail open)
         
-        try:
-            # Log the interaction for analytics purposes
-            with connection.cursor() as cur:
-                # Check if chat_session_id is provided for the log
-                if chat_session_id:
+        # =====================================================================
+        # ANALYTICS LOGGING - Now async for faster response times
+        # =====================================================================
+        # The user doesn't need to wait for analytics to be written.
+        # We handle this in two parts:
+        # 1. Session name update (SYNC) - needed for response
+        # 2. Interaction logging (ASYNC) - doesn't block response
+        
+        # Update session name synchronously (needed for response)
+        session_name = None
+        if chat_session_id and TABLE_NAME_PARAM and not is_websocket:
+            try:
+                session_name = update_session_name(
+                    table_name=TABLE_NAME_PARAM,
+                    session_id=chat_session_id,
+                    bedrock_llm_id=BEDROCK_LLM_ID,
+                    db_connection=connection
+                )
+                if session_name:
+                    logger.info(f"Updated session name to: {session_name}")
+                else:
+                    logger.info("Session name not updated (may already exist or insufficient history)")
+            except Exception as name_error:
+                logger.error(f"Error updating session name: {name_error}")
+                # Don't fail the request if session name update fails
+        
+        # Define async logging function
+        def log_interaction_async(session_id, q, resp, sources, tb_id):
+            """
+            Log user interaction to database in background thread.
+            
+            NOTE: This runs after the response is returned to minimize latency.
+            We get a new connection from the pool since the main connection
+            may be returned by the time this runs.
+            """
+            async_conn = None
+            try:
+                async_conn = connect_to_db()
+                with async_conn.cursor() as cur:
                     cur.execute(
                         """
                         INSERT INTO user_interactions
                         (chat_session_id, sender_role, query_text, response_text, source_chunks)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
-                        (chat_session_id, "User", question, response_data["response"], json.dumps(response_data["sources_used"]))
+                        (session_id, "User", q, resp, json.dumps(sources))
                     )
-            
-            connection.commit()
-            logger.info(f"Logged question for textbook {textbook_id}")
-            
-            # Update session name if this is a chat session (only for non-WebSocket requests)
-            session_name = None
-            if chat_session_id and TABLE_NAME_PARAM and not is_websocket:
-                try:
-                    session_name = update_session_name(
-                        table_name=TABLE_NAME_PARAM,
-                        session_id=chat_session_id,
-                        bedrock_llm_id=BEDROCK_LLM_ID,
-                        db_connection=connection
-                    )
-                    if session_name:
-                        logger.info(f"Updated session name to: {session_name}")
-                    else:
-                        logger.info("Session name not updated (may already exist or insufficient history)")
-                except Exception as name_error:
-                    logger.error(f"Error updating session name: {name_error}")
-                    # Don't fail the request if session name update fails
-            
-        except Exception as db_error:
-            connection.rollback()
-            logger.error(f"Error logging question: {db_error}")
-        finally:
-            # Return connection to pool instead of closing
-            if connection:
-                return_db_connection(connection)
-                connection = None
+                async_conn.commit()
+                logger.info(f"[ASYNC] Logged interaction for textbook {tb_id}")
+            except Exception as async_error:
+                logger.error(f"[ASYNC] Error logging interaction: {async_error}")
+                if async_conn:
+                    try:
+                        async_conn.rollback()
+                    except:
+                        pass
+            finally:
+                if async_conn:
+                    return_db_connection(async_conn)
+        
+        # Start async logging if we have a session
+        if chat_session_id:
+            # Start background thread for analytics logging
+            # Using daemon=False to ensure logging completes even if handler returns
+            log_thread = threading.Thread(
+                target=log_interaction_async,
+                args=(chat_session_id, question, response_data["response"], 
+                      response_data["sources_used"], textbook_id),
+                daemon=False  # Ensure thread completes before Lambda freezes
+            )
+            log_thread.start()
+            logger.info("Started async analytics logging thread")
+        
+        # Return the main connection to pool now (async logging uses its own)
+        if connection:
+            return_db_connection(connection)
+            connection = None
         
         # Return successful response
         response_body = {

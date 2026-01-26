@@ -1202,7 +1202,7 @@ export class ApiGatewayStack extends cdk.Stack {
             tagOrDigest: "latest",
           }
         ),
-        memorySize: 1024,
+        memorySize: 2048,  // 2x CPU power for LLM/embedding processing (was 1024)
         timeout: cdk.Duration.seconds(300),
         vpc: vpcStack.vpc,
         functionName: `${id}-TextGenLambdaDockerFunction`,
