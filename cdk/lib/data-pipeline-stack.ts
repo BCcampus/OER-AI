@@ -277,12 +277,7 @@ export class DataPipelineStack extends cdk.Stack {
               effect: iam.Effect.ALLOW,
               actions: ["bedrock:InvokeModel"],
               resources: [
-                // Cross-Region Inference Profile
-                `arn:aws:bedrock:${this.region}::inference-profile/us.cohere.embed-v4:0`,
-                // Foundation models in destination regions
                 `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
-                `arn:aws:bedrock:us-east-2::foundation-model/cohere.embed-v4:0`,
-                `arn:aws:bedrock:us-west-2::foundation-model/cohere.embed-v4:0`,
               ],
             }),
           ],
@@ -330,7 +325,7 @@ export class DataPipelineStack extends cdk.Stack {
         "--additional-python-modules": PYTHON_LIBS,
         // Custom modules/wheels from S3
         //"--extra-py-files": `s3://${this.glueBucket.bucketName}/glue/libs/`,
-        "--embedding_model_id": `us.cohere.embed-v4:0`,  // Inference profile for cross-region
+        "--embedding_model_id": `cohere.embed-v4:0`,
       },
       connections: {
         connections: [this.glueConnection.ref],
@@ -371,7 +366,7 @@ export class DataPipelineStack extends cdk.Stack {
         "--SQS_QUEUE_URL": this.mediaIngestionQueue.queueUrl,
         "--TempDir": `s3://${this.glueBucket.bucketName}/temp/media/`,
         "--additional-python-modules": MEDIA_PYTHON_LIBS,
-        "--embedding_model_id": `us.cohere.embed-v4:0`,  // Inference profile for cross-region
+        "--embedding_model_id": `cohere.embed-v4:0`,
       },
       connections: {
         connections: [this.glueConnection.ref],

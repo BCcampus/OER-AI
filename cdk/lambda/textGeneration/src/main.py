@@ -183,8 +183,9 @@ def get_bedrock_runtime():
     global _bedrock_runtime
     if _bedrock_runtime is None:
         import boto3
-        # Use BEDROCK_REGION - inference profiles handle cross-region routing automatically
-        _bedrock_runtime = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
+        # Embeddings require us-east-1 because Cohere Embed v4 is only available there
+        # LangChain BedrockEmbeddings doesn't support inference profiles
+        _bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
         logger.info("Bedrock runtime client initialized")
     return _bedrock_runtime
 
@@ -203,7 +204,7 @@ def get_embeddings():
         _embeddings = BedrockEmbeddings(
             model_id=EMBEDDING_MODEL_ID,
             client=bedrock_runtime,
-            region_name=BEDROCK_REGION,  # Inference profiles route to appropriate region
+            region_name='us-east-1',  # Cohere Embed v4 only available in us-east-1
             model_kwargs={"input_type": "search_document"}
         )
         logger.info(f"Initialized embeddings with model: {EMBEDDING_MODEL_ID}")
