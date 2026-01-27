@@ -186,7 +186,8 @@ def get_connection_pool():
                 user=db["username"],
                 password=db["password"],
                 host=RDS_PROXY_ENDPOINT,
-                port=db["port"]
+                port=db["port"],
+                sslmode="require"
             )
             logger.info("Connection pool created successfully")
         except Exception as e:
@@ -351,7 +352,8 @@ def track_practice_material_analytics(
             user=db["username"],
             password=db["password"],
             host=RDS_PROXY_ENDPOINT,
-            port=db["port"]
+            port=db["port"],
+            sslmode="require"
         )
         
         cursor = conn.cursor()

@@ -92,7 +92,7 @@ FORCE_COLD_START_TEST = os.environ.get("FORCE_COLD_START_TEST", "false").lower()
 # =============================================================================
 # GLOBAL STATE - Pre-loaded at container startup for cold start optimization
 # =============================================================================
-# These variables are initialized in the try block below (lines ~47-92).
+# These variables are initialized in the try block below (lines ~116-178).
 # The lazy-loading functions (get_ssm_client, etc.) are FALLBACKS that only
 # create clients if pre-loading failed. In normal operation, they just return
 # the pre-loaded client.
@@ -167,7 +167,8 @@ try:
             database=db_creds["dbname"],
             user=db_creds["username"],
             password=db_creds["password"],
-            port=int(db_creds["port"])
+            port=int(db_creds["port"]),
+            sslmode="require"
         )
         logger.info("Database connection pool pre-warmed successfully")
     except Exception as pool_error:
@@ -326,7 +327,8 @@ def get_db_connection_pool():
                         database=secret["dbname"],
                         user=secret["username"],
                         password=secret["password"],
-                        port=int(secret["port"])
+                        port=int(secret["port"]),
+                        sslmode="require"
                     )
                     logger.info("Database connection pool created")
                 except Exception as e:
@@ -1034,16 +1036,22 @@ def handler(event, context):
             "statusCode": tge.status_code,
             "headers": {
                 "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*"
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
             },
             "body": json.dumps(error_body)
         })
 
-    except Exception as e:
         logger.error(f"Unhandled exception: {e}", exc_info=True)
         return finalize({
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+            },
             "body": json.dumps({"error": "Internal server error", "message": str(e)})
         })
         

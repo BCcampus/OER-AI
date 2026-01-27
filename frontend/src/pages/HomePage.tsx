@@ -41,10 +41,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
-  const [welcomeMsg, setWelcomeMsg] = useState<string | null>(
-    import.meta.env.VITE_DEFAULT_WELCOME_MESSAGE ||
-    "Welcome to the OpenED AI study companion. Happy learning! :-)"
-  );
+  const [welcomeMsg, setWelcomeMsg] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
 
   // Check if user has seen the welcome message
