@@ -180,24 +180,16 @@ except Exception as e:
 # =============================================================================
 
 def get_secrets_manager():
-    """Get Secrets Manager client (pre-loaded, with fallback if pre-loading failed)"""
-    global _secrets_manager
+    """Return the pre-loaded Secrets Manager client. Fails fast if not initialized."""
     if _secrets_manager is None:
-        # FALLBACK: Only runs if pre-loading failed
-        logger.warning("Secrets Manager not pre-loaded, initializing now (fallback)")
-        import boto3
-        _secrets_manager = boto3.client("secretsmanager", region_name=REGION)
+        raise ConfigurationError("Secrets Manager client not initialized. Pre-loading failed.")
     return _secrets_manager
 
 
 def get_ssm_client():
-    """Get SSM client (pre-loaded, with fallback if pre-loading failed)"""
-    global _ssm_client
+    """Return the pre-loaded SSM client. Fails fast if not initialized."""
     if _ssm_client is None:
-        # FALLBACK: Only runs if pre-loading failed
-        logger.warning("SSM client not pre-loaded, initializing now (fallback)")
-        import boto3
-        _ssm_client = boto3.client("ssm", region_name=REGION)
+        raise ConfigurationError("SSM client not initialized. Pre-loading failed.")
     return _ssm_client
 
 
@@ -780,6 +772,7 @@ def track_usage_and_logs(connection, chat_session_id, question, response_data, t
             finally:
                 if async_conn:
                     return_db_connection(async_conn)
+                    logger.debug("[ASYNC] Returned connection to pool")
 
         log_thread = threading.Thread(
             target=log_interaction_async,
@@ -791,6 +784,97 @@ def track_usage_and_logs(connection, chat_session_id, question, response_data, t
         logger.info("Started async analytics logging thread")
 
     return session_name
+
+
+# =============================================================================
+# HANDLER HELPER FUNCTIONS
+# =============================================================================
+
+def _handle_get_request(event, finalize):
+    """
+    Handle GET requests for chat history retrieval.
+    
+    Args:
+        event: Lambda event
+        finalize: Callback to wrap response with metrics
+        
+    Returns:
+        Lambda response dict
+    """
+    logger.info("Processing GET request for chat history")
+    chat_session_id = event.get("pathParameters", {}).get("id")
+    
+    if not chat_session_id:
+        return finalize({
+            "statusCode": 400,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*"
+            },
+            "body": json.dumps({"error": "Missing session ID"})
+        })
+    
+    from helpers.chat import get_chat_history
+    history = get_chat_history(chat_session_id)
+    
+    return finalize({
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*"
+        },
+        "body": json.dumps(history)
+    })
+
+
+def _setup_resources(textbook_id):
+    """
+    Initialize database connection, embeddings, and retriever for a textbook.
+    
+    Args:
+        textbook_id: The textbook to set up resources for
+        
+    Returns:
+        tuple: (connection, embeddings, retriever)
+        
+    Raises:
+        UpstreamServiceError: If DB connection fails
+        ValidationError: If no embeddings found for textbook
+    """
+    try:
+        connection = connect_to_db()
+    except Exception as e:
+        raise UpstreamServiceError(f"Failed to connect to database: {str(e)}", "Database")
+    
+    embeddings = get_embeddings()
+    
+    from helpers.vectorstore import get_textbook_retriever
+    db_creds = get_db_credentials()
+    vectorstore_config = {
+        "dbname": db_creds["dbname"],
+        "user": db_creds["username"],
+        "password": db_creds["password"],
+        "host": RDS_PROXY_ENDPOINT,
+        "port": db_creds["port"]
+    }
+    
+    try:
+        retriever = get_textbook_retriever(
+            llm=None,
+            textbook_id=textbook_id,
+            vectorstore_config_dict=vectorstore_config,
+            embeddings=embeddings
+        )
+        if retriever is None:
+            raise ValidationError(f"No embeddings found for textbook {textbook_id}")
+    except ValidationError:
+        raise
+    except Exception as re:
+        raise UpstreamServiceError(f"Failed to initialize retriever: {str(re)}", "VectorStore")
+    
+    return connection, embeddings, retriever
 
 
 def handler(event, context):
@@ -832,36 +916,10 @@ def handler(event, context):
             logger.error(f"❌ Failed to initialize constants: {e}")
             raise ConfigurationError(f"Configuration error: {str(e)}")
 
-        # 2. Parse & Validate Request
-        # Route GET requests to history handler immediately
+        # 2. Route by HTTP Method
         http_method = event.get("httpMethod", "")
         if http_method == "GET":
-            logger.info("Processing GET request for chat history")
-            chat_session_id = event.get("pathParameters", {}).get("id")
-            
-            if not chat_session_id:
-                return finalize({
-                    "statusCode": 400,
-                    "headers": {
-                        "Content-Type": "application/json", 
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Allow-Headers": "*"
-                    },
-                    "body": json.dumps({"error": "Missing session ID"})
-                })
-                
-            from helpers.chat import get_chat_history
-            history = get_chat_history(chat_session_id)
-            
-            return finalize({
-                "statusCode": 200, 
-                "headers": {
-                    "Content-Type": "application/json", 
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers": "*"
-                },
-                "body": json.dumps(history)
-            })
+            return _handle_get_request(event, finalize)
 
         # POST Request Logic (Generation)
         question, textbook_id, chat_session_id, is_websocket, connection_id, websocket_endpoint = parse_and_validate_request(event)
@@ -875,41 +933,11 @@ def handler(event, context):
                 raise ValidationError("Invalid session ID format", {"original_error": str(e)})
 
         # 4. Resource Setup (DB & Retriever)
-        try:
-            connection = connect_to_db()
-        except Exception as e:
-            raise UpstreamServiceError(f"Failed to connect to database: {str(e)}", "Database")
+        connection, embeddings, retriever = _setup_resources(textbook_id)
         
-        # Token Check
+        # 5. Token Check
         ssm_client = get_ssm_client()
         enforce_token_limits(connection, chat_session_id, ssm_client, is_websocket, connection_id, websocket_endpoint)
-
-        # Embeddings & Retriever
-        embeddings = get_embeddings()
-        from helpers.vectorstore import get_textbook_retriever
-        
-        db_creds = get_db_credentials()
-        vectorstore_config = {
-            "dbname": db_creds["dbname"],
-            "user": db_creds["username"],
-            "password": db_creds["password"],
-            "host": RDS_PROXY_ENDPOINT,
-            "port": db_creds["port"]
-        }
-        
-        try:
-            retriever = get_textbook_retriever(
-                llm=None,
-                textbook_id=textbook_id,
-                vectorstore_config_dict=vectorstore_config,
-                embeddings=embeddings
-            )
-            if retriever is None:
-                 raise ValidationError(f"No embeddings found for textbook {textbook_id}")
-        except ValidationError:
-            raise
-        except Exception as re:
-            raise UpstreamServiceError(f"Failed to initialize retriever: {str(re)}", "VectorStore")
 
         # 5. Business Logic: FAQ Check OR Generate Response
         response_data = None
