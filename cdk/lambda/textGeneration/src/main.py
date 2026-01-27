@@ -777,8 +777,10 @@ def track_usage_and_logs(connection, chat_session_id, question, response_data, t
             except Exception as async_error:
                 logger.error(f"[ASYNC] Error logging interaction: {async_error}")
                 if async_conn:
-                    try: async_conn.rollback() 
-                    except: pass
+                    try:
+                        async_conn.rollback()
+                    except Exception as rollback_error:
+                        logger.error(f"[ASYNC] Error during rollback: {rollback_error}", exc_info=True)
             finally:
                 if async_conn:
                     return_db_connection(async_conn)
