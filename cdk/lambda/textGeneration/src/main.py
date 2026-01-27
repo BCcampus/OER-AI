@@ -83,6 +83,7 @@ BEDROCK_LLM_PARAM = os.environ.get("BEDROCK_LLM_PARAM")
 EMBEDDING_MODEL_PARAM = os.environ.get("EMBEDDING_MODEL_PARAM")
 BEDROCK_REGION_PARAM = os.environ.get("BEDROCK_REGION_PARAM")
 GUARDRAIL_ID_PARAM = os.environ.get("GUARDRAIL_ID_PARAM")
+EMBEDDING_REGION_PARAM = os.environ.get("EMBEDDING_REGION_PARAM")
 WEBSOCKET_API_ENDPOINT = os.environ.get("WEBSOCKET_API_ENDPOINT", "")
 TABLE_NAME_PARAM = os.environ.get("TABLE_NAME_PARAM")
 DAILY_TOKEN_LIMIT_PARAM = os.environ.get("DAILY_TOKEN_LIMIT_PARAM")
@@ -110,6 +111,7 @@ _startup_ts = time.time()
 BEDROCK_LLM_ID = None
 EMBEDDING_MODEL_ID = None
 BEDROCK_REGION = None
+EMBEDDING_REGION = None
 GUARDRAIL_ID = None
 
 # Pre-load critical configuration during container startup (outside handler)
@@ -139,6 +141,13 @@ try:
     if GUARDRAIL_ID_PARAM:
         GUARDRAIL_ID = _ssm_client.get_parameter(Name=GUARDRAIL_ID_PARAM, WithDecryption=True)["Parameter"]["Value"]
         logger.info(f"Pre-loaded GUARDRAIL_ID")
+    
+    if EMBEDDING_REGION_PARAM:
+        EMBEDDING_REGION = _ssm_client.get_parameter(Name=EMBEDDING_REGION_PARAM, WithDecryption=True)["Parameter"]["Value"]
+        logger.info(f"Pre-loaded EMBEDDING_REGION: {EMBEDDING_REGION}")
+    else:
+        EMBEDDING_REGION = "us-east-1"  # Default for Cohere Embed v4
+        logger.info(f"Using default EMBEDDING_REGION: {EMBEDDING_REGION}")
     
     logger.info(f"Pre-loading completed in {time.time() - _startup_ts:.2f}s")
     
@@ -195,20 +204,20 @@ def get_ssm_client():
 
 def get_bedrock_runtime():
     """
-    Get Bedrock runtime client.
+    Get Bedrock runtime client for embeddings.
     
     NOTE: This is intentionally lazy-loaded (not pre-loaded) because:
     - Bedrock region may be different from the Lambda's region
-    - The region is determined by BEDROCK_REGION which is fetched from SSM
+    - The region is determined by EMBEDDING_REGION which is fetched from SSM
     - We need SSM parameters loaded first before knowing which region to use
     """
     global _bedrock_runtime
     if _bedrock_runtime is None:
         import boto3
-        # Embeddings require us-east-1 because Cohere Embed v4 is only available there
-        # LangChain BedrockEmbeddings doesn't support inference profiles
-        _bedrock_runtime = boto3.client("bedrock-runtime", region_name='us-east-1')
-        logger.info("Bedrock runtime client initialized")
+        # Use EMBEDDING_REGION from SSM parameter (defaults to us-east-1 for Cohere Embed v4)
+        embedding_region = EMBEDDING_REGION or "us-east-1"
+        _bedrock_runtime = boto3.client("bedrock-runtime", region_name=embedding_region)
+        logger.info(f"Bedrock runtime client initialized for region: {embedding_region}")
     return _bedrock_runtime
 
 
@@ -223,13 +232,14 @@ def get_embeddings():
     if _embeddings is None:
         from langchain_aws import BedrockEmbeddings
         bedrock_runtime = get_bedrock_runtime()
+        embedding_region = EMBEDDING_REGION or "us-east-1"
         _embeddings = BedrockEmbeddings(
             model_id=EMBEDDING_MODEL_ID,
             client=bedrock_runtime,
-            region_name='us-east-1',  # Cohere Embed v4 only available in us-east-1
+            region_name=embedding_region,
             model_kwargs={"input_type": "search_document"}
         )
-        logger.info(f"Initialized embeddings with model: {EMBEDDING_MODEL_ID}")
+        logger.info(f"Initialized embeddings with model: {EMBEDDING_MODEL_ID} in region: {embedding_region}")
     return _embeddings
 
 

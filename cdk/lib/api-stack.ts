@@ -944,6 +944,16 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
+    const embeddingRegionParameter = new ssm.StringParameter(
+      this,
+      "EmbeddingRegionParameter",
+      {
+        parameterName: `/${id}/OER/EmbeddingRegion`,
+        description: "Region where embedding model is available (e.g., us-east-1 for Cohere)",
+        stringValue: "us-east-1",
+      }
+    );
+
     const dailyTokenLimitParameter = new ssm.StringParameter(
       this,
       "DailyTokenLimitParameter",
@@ -1213,6 +1223,7 @@ export class ApiGatewayStack extends cdk.Stack {
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
           BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
+          EMBEDDING_REGION_PARAM: embeddingRegionParameter.parameterName,
           TABLE_NAME_PARAM: sessionTable.tableName,
           GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
           DAILY_TOKEN_LIMIT_PARAM: dailyTokenLimitParameter.parameterName,
@@ -1300,6 +1311,7 @@ export class ApiGatewayStack extends cdk.Stack {
           bedrockLLMParameter.parameterArn,
           embeddingModelParameter.parameterArn,
           bedrockRegionParameter.parameterArn,
+          embeddingRegionParameter.parameterArn,
           guardrailParameter.parameterArn,
           dailyTokenLimitParameter.parameterArn,
           //messageLimitParameter.parameterArn,
