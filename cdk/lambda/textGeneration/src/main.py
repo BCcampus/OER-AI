@@ -917,6 +917,23 @@ def handler(event, context):
     
     connection = None
     
+    # Handle warmup request - initialize resources but return immediately
+    if event.get("warmup"):
+        logger.info("🔥 WARMUP request received")
+        try:
+            initialize_constants()
+            _ = get_embeddings()  # Pre-load embeddings model
+            connection = connect_to_db()
+            return_db_connection(connection)
+            warmup_duration_ms = int((time.time() - start_time) * 1000)
+            logger.info(f"✅ WARMUP complete in {warmup_duration_ms}ms - container is warm")
+        except Exception as e:
+            logger.warning(f"Warmup encountered error (non-fatal): {e}")
+        
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"warmup": "success"})
+        }
 
     try:
         # 1. Initialization

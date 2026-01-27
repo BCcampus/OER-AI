@@ -251,6 +251,16 @@ export default function AIChatPage() {
         tokenAttached: Boolean(webSocketToken),
       });
       console.log("Streaming: ", isStreaming);
+      
+      // Pre-warm the text generation Lambda immediately on connect
+      // This reduces cold start latency when user sends first message
+      if (textbook?.id) {
+        console.log("[WebSocket] Sending warmup request for textbook:", textbook.id);
+        sendWebSocketMessage({
+          action: "warmup",
+          textbook_id: textbook.id,
+        });
+      }
     },
     onDisconnect: () => {
       console.log("[WebSocket] Disconnected", {
