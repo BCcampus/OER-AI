@@ -33,7 +33,7 @@ exports.handler = async (event) => {
 
       console.log(
         "Invoking text generation function with payload:",
-        textGenPayload
+        textGenPayload,
       );
 
       const result = await lambda.send(
@@ -41,7 +41,7 @@ exports.handler = async (event) => {
           FunctionName: process.env.TEXT_GEN_FUNCTION_NAME,
           InvocationType: "Event", // Asynchronous invocation
           Payload: JSON.stringify(textGenPayload),
-        })
+        }),
       );
 
       console.log("Text generation function invoked successfully:", result);
@@ -110,7 +110,7 @@ exports.handler = async (event) => {
 
       console.log(
         "Invoking practice material function with payload:",
-        practicePayload
+        practicePayload,
       );
 
       const result = await lambda.send(
@@ -118,7 +118,7 @@ exports.handler = async (event) => {
           FunctionName: process.env.PRACTICE_MATERIAL_FUNCTION_NAME,
           InvocationType: "Event", // Asynchronous invocation
           Payload: JSON.stringify(practicePayload),
-        })
+        }),
       );
 
       console.log("Practice material function invoked successfully:", result);
@@ -126,25 +126,45 @@ exports.handler = async (event) => {
       return { statusCode: 200 };
     }
 
-    // Handle warmup requests - invoke practice material Lambda to pre-warm it
+    // Handle warmup requests - invoke both text generation and practice material Lambdas to pre-warm them
     if (action === "warmup") {
       console.log("Warmup request received");
 
       const warmupPayload = {
         warmup: true, // Flag to trigger early return in Lambda
+        textbook_id: textbook_id, // Pass textbook_id for context if needed
       };
 
+      // Warm up text generation Lambda (primary target for chat)
+      try {
+        await lambda.send(
+          new InvokeCommand({
+            FunctionName: process.env.TEXT_GEN_FUNCTION_NAME,
+            InvocationType: "Event", // Fire-and-forget
+            Payload: JSON.stringify(warmupPayload),
+          }),
+        );
+        console.log("Text generation warmup invocation sent successfully");
+      } catch (warmupError) {
+        console.warn("Text generation warmup invocation failed:", warmupError);
+        // Don't fail the request - warmup is best-effort
+      }
+
+      // Also warm up practice material Lambda
       try {
         await lambda.send(
           new InvokeCommand({
             FunctionName: process.env.PRACTICE_MATERIAL_FUNCTION_NAME,
             InvocationType: "Event", // Fire-and-forget
             Payload: JSON.stringify(warmupPayload),
-          })
+          }),
         );
-        console.log("Warmup invocation sent successfully");
+        console.log("Practice material warmup invocation sent successfully");
       } catch (warmupError) {
-        console.warn("Warmup invocation failed:", warmupError);
+        console.warn(
+          "Practice material warmup invocation failed:",
+          warmupError,
+        );
         // Don't fail the request - warmup is best-effort
       }
 

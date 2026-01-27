@@ -25,6 +25,8 @@ import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as sqs from "aws-cdk-lib/aws-sqs";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
@@ -944,6 +946,16 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
+    const embeddingRegionParameter = new ssm.StringParameter(
+      this,
+      "EmbeddingRegionParameter",
+      {
+        parameterName: `/${id}/OER/EmbeddingRegion`,
+        description: "Region where embedding model is available (e.g., us-east-1 for Cohere)",
+        stringValue: "us-east-1",
+      }
+    );
+
     const dailyTokenLimitParameter = new ssm.StringParameter(
       this,
       "DailyTokenLimitParameter",
@@ -1202,7 +1214,7 @@ export class ApiGatewayStack extends cdk.Stack {
             tagOrDigest: "latest",
           }
         ),
-        memorySize: 1024,
+        memorySize: 2048,  // 2x CPU power for LLM/embedding processing (was 1024)
         timeout: cdk.Duration.seconds(300),
         vpc: vpcStack.vpc,
         functionName: `${id}-TextGenLambdaDockerFunction`,
@@ -1213,6 +1225,7 @@ export class ApiGatewayStack extends cdk.Stack {
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
           BEDROCK_REGION_PARAM: bedrockRegionParameter.parameterName,
+          EMBEDDING_REGION_PARAM: embeddingRegionParameter.parameterName,
           TABLE_NAME_PARAM: sessionTable.tableName,
           GUARDRAIL_ID_PARAM: guardrailParameter.parameterName,
           DAILY_TOKEN_LIMIT_PARAM: dailyTokenLimitParameter.parameterName,
@@ -1231,6 +1244,23 @@ export class ApiGatewayStack extends cdk.Stack {
     // Add dependency to ensure image exists in ECR before Lambda is created
     cfnTextGenDockerFunc.addDependency(
       textGenImageWaiter.node.defaultChild as cdk.CfnResource
+    );
+
+    // EventBridge scheduled rule to keep Lambda warm (every 7 minutes)
+    // This prevents cold starts by periodically invoking the function with a warmup payload
+    const textGenWarmupRule = new events.Rule(this, `${id}-TextGenWarmupRule`, {
+      ruleName: `${id}-TextGenKeepWarm`,
+      description: "Keeps text generation Lambda warm by invoking every 7 minutes",
+      schedule: events.Schedule.rate(cdk.Duration.minutes(7)),
+    });
+
+    textGenWarmupRule.addTarget(
+      new targets.LambdaFunction(textGenLambdaDockerFunc, {
+        event: events.RuleTargetInput.fromObject({
+          warmup: true,
+          source: "eventbridge-scheduled",
+        }),
+      })
     );
 
     // API Gateway permissions
@@ -1270,12 +1300,9 @@ export class ApiGatewayStack extends cdk.Stack {
         "bedrock:ApplyGuardrail",
       ],
       resources: [
-        /* Nova Pro inference profile
-        `arn:aws:bedrock:us-east-1:784303385514:inference-profile/us.amazon.nova-pro-v1:0`,
-        // Nova Pro foundation model (what ChatBedrock actually calls)
-        `arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0`,
-        */
+        // LLM model (Llama 3)
         `arn:aws:bedrock:${this.region}::foundation-model/meta.llama3-70b-instruct-v1:0`,
+        // Cohere Embed v4 (us-east-1 only)
         `arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0`,
         // Guardrail
         `arn:aws:bedrock:${this.region}:${this.account}:guardrail/${bedrockGuardrail.attrGuardrailId}`,
@@ -1303,6 +1330,7 @@ export class ApiGatewayStack extends cdk.Stack {
           bedrockLLMParameter.parameterArn,
           embeddingModelParameter.parameterArn,
           bedrockRegionParameter.parameterArn,
+          embeddingRegionParameter.parameterArn,
           guardrailParameter.parameterArn,
           dailyTokenLimitParameter.parameterArn,
           //messageLimitParameter.parameterArn,
@@ -1896,26 +1924,32 @@ export class ApiGatewayStack extends cdk.Stack {
       practiceMaterialImageWaiter.node.defaultChild as cdk.CfnResource
     );
 
-    // Provisioned Concurrency enabled with 1 execution to improve cold start performance
-    const practiceMaterialAlias = new lambda.Alias(
-      this,
-      `${id}-PracticeMaterialAlias`,
-      {
-        aliasName: "live",
-        version: practiceMaterialDockerFunc.currentVersion,
-        provisionedConcurrentExecutions: 1,
-      }
+    // EventBridge scheduled rule to keep Lambda warm (every 7 minutes)
+    // This replaces provisioned concurrency for cost savings (~$15-20/month saved)
+    const practiceMaterialWarmupRule = new events.Rule(this, `${id}-PracticeMaterialWarmupRule`, {
+      ruleName: `${id}-PracticeMaterialKeepWarm`,
+      description: "Keeps practice material Lambda warm by invoking every 7 minutes",
+      schedule: events.Schedule.rate(cdk.Duration.minutes(7)),
+    });
+
+    practiceMaterialWarmupRule.addTarget(
+      new targets.LambdaFunction(practiceMaterialDockerFunc, {
+        event: events.RuleTargetInput.fromObject({
+          warmup: true,
+          source: "eventbridge-scheduled",
+        }),
+      })
     );
 
     // WebSocket streaming support - add environment variable and permissions
     // (must be after practiceMaterialDockerFunc is defined)
-    // Use alias to leverage provisioned concurrency
+    // Using function directly (no alias) since we use EventBridge keep-warm instead of provisioned concurrency
     defaultFunction.addEnvironment(
       "PRACTICE_MATERIAL_FUNCTION_NAME",
-      practiceMaterialAlias.functionName
+      practiceMaterialDockerFunc.functionName
     );
     practiceMaterialDockerFunc.addToRolePolicy(wsPolicy);
-    practiceMaterialAlias.grantInvoke(defaultFunction);
+    practiceMaterialDockerFunc.grantInvoke(defaultFunction);
 
     // IAM: Secrets, SSM, Bedrock
 
