@@ -350,6 +350,23 @@ During the first-time deployment of the API stack, the deployment may fail becau
 
 To resolve this issue, follow one of these approaches:
 
+### Authorize GitHub Connection for CI/CD
+
+After CDK deployment, the GitHub connection for CodePipeline is created in a **pending** state. You must manually authorize it:
+
+1. Navigate to **AWS Console** → **Code Pipeline** → **Developer Tools** → **Settings** → **Connections**
+   
+2. Find the connection named `<STACK-PREFIX>-CICD-github-connection`
+3. The status will show **Pending** - click on the connection name
+4. Click **Update pending connection**
+5. A GitHub authorization window will appear - click **Authorize AWS Connector for GitHub**
+6. Select the GitHub account/organization and grant access to the OER-AI repository
+7. Click **Install & Authorize**
+8. The connection status should now show **Available**
+
+> [!IMPORTANT]
+> The CI/CD pipeline will not be able to pull source code from GitHub until this connection is authorized. If you skip this step, pipeline runs will fail at the Source stage.
+
 #### Manually Trigger the Pipeline Build (Recommended):
 
 1. Go to the AWS Console → CodePipeline → select your pipeline `<STACK-PREFIX>-pipeline` → click `Release change` or `Start pipeline`.
@@ -366,6 +383,7 @@ To resolve this issue, follow one of these approaches:
 - Check the CodePipeline and CodeBuild logs for any errors during the build process.
 - Verify that the required images and tags are present in ECR.
 - Ensure that the IAM roles for CodePipeline and CodeBuild have the necessary permissions to push images to ECR.
+
 
 ## Post-Deployment
 
@@ -445,7 +463,6 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
 - Solution:
   - Most likely, this is a guardrail issue. Double check the CloudWatch logs for the Text Generation Lambda function.
   - Make sure the guardrail can be found. Even if it's created and shows status "Ready", make sure you create a versioned release from the working draft (eg: version 1) instead of using the DRAFT version.
-
 
 ## Cleanup
 
