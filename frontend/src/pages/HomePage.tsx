@@ -67,9 +67,32 @@ export default function HomePage() {
 
   const { token } = useAuthToken();
 
-  // Fetch textbooks from API
+  // Fetch textbooks from API with client-side caching
   const fetchTextbooks = async (offset = 0, append = false) => {
     if (!token) return;
+
+    const cacheKey = `textbooks_${offset}`;
+    const cacheTimeKey = `${cacheKey}_time`;
+    const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+    // Check cache first (only for initial loads, not appends)
+    if (!append) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        const cacheTime = sessionStorage.getItem(cacheTimeKey);
+        
+        if (cached && cacheTime && Date.now() - parseInt(cacheTime) < CACHE_TTL_MS) {
+          const data = JSON.parse(cached);
+          setTextbooks(data.textbooks || []);
+          setPagination(data.pagination);
+          setLoading(false);
+          console.log("Loaded textbooks from cache");
+          return;
+        }
+      } catch (cacheError) {
+        console.warn("Cache read error:", cacheError);
+      }
+    }
 
     try {
       if (append) {
@@ -89,6 +112,16 @@ export default function HomePage() {
         }
       );
       const data = await response.json();
+
+      // Cache the response (only for initial loads)
+      if (!append) {
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+          sessionStorage.setItem(cacheTimeKey, Date.now().toString());
+        } catch (cacheError) {
+          console.warn("Cache write error:", cacheError);
+        }
+      }
 
       if (append) {
         setTextbooks((prev) => [...prev, ...(data.textbooks || [])]);
