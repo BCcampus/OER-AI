@@ -421,7 +421,6 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
   - Missing environment variables
   - Node version mismatch
   - Dependency installation failures
-  - AWS Amplify GitHub App not configured
 
 **Issue: Database connection errors**
 
