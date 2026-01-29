@@ -3,18 +3,19 @@
  *
  * This migration inserts the default prompt templates used for the OER AI assistant,
  * including RAG-type prompts and guided prompts with their associated questions.
+ *
+ * Uses WHERE NOT EXISTS to safely skip if templates already exist by name.
  */
 
 exports.up = (pgm) => {
-  // Insert RAG prompt templates
+  // Insert RAG prompt templates (only if they don't exist)
   pgm.sql(`
-    -- Insert RAG prompt templates
+    -- Break down a complex formula
     INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
-    VALUES 
-      (
-        uuid_generate_v4(),
-        'Break down a complex formula',
-        'Provide a step-by-step deconstruction of a mathematical or scientific equation.
+    SELECT 
+      uuid_generate_v4(),
+      'Break down a complex formula',
+      'Provide a step-by-step deconstruction of a mathematical or scientific equation.
 
 1. Identify the formula: [FORMULA_TO_BREAK_DOWN].
 
@@ -25,14 +26,17 @@ exports.up = (pgm) => {
 4. Explain the overall purpose or meaning of the formula in [SIMPLE_TERMS].
 
 5. Explain the formula in a way that addresses  [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia, or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Compare and contrast topics',
-        'Draft a comprehensive comparative analysis of two related subjects.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Break down a complex formula');
+
+    -- Compare and contrast topics
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Compare and contrast topics',
+      'Draft a comprehensive comparative analysis of two related subjects.
 
 1. Identify the three most significant similarities between [TOPIC_A] and [TOPIC_B].
 
@@ -43,14 +47,17 @@ exports.up = (pgm) => {
 4. Present the analysis structured into two clear paragraphs, focusing on the context of [ACADEMIC_COURSE_NAME].
 
 5. The analysis must incorporate [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia, or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Create a study guide outline',
-        'Generate a structured, hierarchical outline for a comprehensive study guide.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Compare and contrast topics');
+
+    -- Create a study guide outline
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Create a study guide outline',
+      'Generate a structured, hierarchical outline for a comprehensive study guide.
 
 1. Create a detailed outline for a study guide covering the [BROAD_COURSE_OR_UNIT].
 
@@ -61,14 +68,17 @@ exports.up = (pgm) => {
 4. The outline must use standard hierarchical notation (e.g., I., A., 1., a.).
 
 5. The outline must include ways to support  [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia, or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Create practice questions',
-        'Generate a targeted set of mixed-format questions for self-assessment.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Create a study guide outline');
+
+    -- Create practice questions
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Create practice questions',
+      'Generate a targeted set of mixed-format questions for self-assessment.
 
 1. Generate a total of [NUMBER] questions covering the topic [SUBJECT_TOPIC].
 
@@ -77,14 +87,17 @@ exports.up = (pgm) => {
 3. Focus primarily on the material presented in [SPECIFIC_SECTION_OR_SOURCE].
 
 4. Provide the correct answer immediately after each question, clearly marked as [ANSWER_LABEL: e.g., Answer, Solution, Key].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Define and explain a term',
-        'Provide a detailed and authoritative explanation of a key concept.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Create practice questions');
+
+    -- Define and explain a term
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Define and explain a term',
+      'Provide a detailed and authoritative explanation of a key concept.
 
 1. Start with a formal, single-sentence definition of the term [TERM_TO_DEFINE].
 
@@ -93,14 +106,17 @@ exports.up = (pgm) => {
 3. Describe the historical context or origin of the term in [ONE_SENTENCE].
 
 4. Explain the significance of [TERM_TO_DEFINE] within the broader field of [ACADEMIC_FIELD].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Explain a concept in simple terms',
-        'Your goal is to simplify a complex idea for easy understanding.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Define and explain a term');
+
+    -- Explain a concept in simple terms
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Explain a concept in simple terms',
+      'Your goal is to simplify a complex idea for easy understanding.
 
 1. Take the concept [COMPLEX_CONCEPT] and explain it using language appropriate for a [CHILD_AGE_OR_GRADE] audience.
 
@@ -111,14 +127,17 @@ exports.up = (pgm) => {
 4. The final explanation should not exceed [WORD_COUNT_MAX] words.
 
 5. The final explanation must include a connection to [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia, or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Explain with analogies',
-        'Provide a series of different conceptual metaphors for a single abstract idea.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Explain a concept in simple terms');
+
+    -- Explain with analogies
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Explain with analogies',
+      'Provide a series of different conceptual metaphors for a single abstract idea.
 
 1. Generate [NUMBER] distinct, creative analogies to explain the abstract concept of [ABSTRACT_CONCEPT].
 
@@ -127,14 +146,17 @@ exports.up = (pgm) => {
 3. For each analogy, explain why the comparison holds true in a single sentence, focusing on the property [KEY_PROPERTY_OF_CONCEPT].
 
 4. Consider the following when generating the analogies [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Generate an example problem',
-        'Generate a realistic and challenging problem that requires understanding of a specific concept.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Explain with analogies');
+
+    -- Generate an example problem
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Generate an example problem',
+      'Generate a realistic and challenging problem that requires understanding of a specific concept.
 
 1. Create a word problem or scenario based on [CONCEPT_OR_FORMULA].
 
@@ -145,14 +167,17 @@ exports.up = (pgm) => {
 4. Provide a clear question at the end that asks the user to calculate [FINAL_ANSWER_UNIT: e.g., velocity, net profit, historical date].
 
 5. Include the [TYPE_OF_DATA_REQUIRED: e.g., constants, initial conditions, dates] needed to solve it.',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Provide real-world applications',
-        'Find specific, practical examples where a theory is used outside of the classroom.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Generate an example problem');
+
+    -- Provide real-world applications
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Provide real-world applications',
+      'Find specific, practical examples where a theory is used outside of the classroom.
 
 1. List three distinct real-world applications of the principle or theory [THEORY_OR_PRINCIPLE].
 
@@ -163,14 +188,17 @@ exports.up = (pgm) => {
 4. The applications should be geared toward a [STUDENT_AUDIENCE_LEVEL] audience.
 
 5. The applications must include  [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia, or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Quiz me on key concepts',
-        'Generate a short, interactive quiz to test my knowledge immediately.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Provide real-world applications');
+
+    -- Quiz me on key concepts
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Quiz me on key concepts',
+      'Generate a short, interactive quiz to test my knowledge immediately.
 
 1. Create a quiz of [NUMBER] questions focused strictly on [NARROW_TOPIC_FOCUS].
 
@@ -179,14 +207,17 @@ exports.up = (pgm) => {
 3. I will provide my answer after each question. Your response should contain only the next question until I say [COMMAND_TO_END_QUIZ: e.g., ''End Quiz'' or ''Stop''].
 
 4. The first question is: [FIRST_QUESTION_TEXT]',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Suggest study strategies',
-        'Generate personalized and effective strategies for mastering a challenging subject.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Quiz me on key concepts');
+
+    -- Suggest study strategies
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Suggest study strategies',
+      'Generate personalized and effective strategies for mastering a challenging subject.
 
 1. Suggest [NUMBER] specific study techniques tailored for improving comprehension of [CHALLENGING_SUBJECT].
 
@@ -197,14 +228,17 @@ exports.up = (pgm) => {
 4. Explain the rationale behind each strategy in a maximum of [SENTENCE_MAX] sentences.
 
 5. The study strategies provided must include ways to support  [Indigenous ways of knowing and being], [Learners with Autism, ADHD, dyslexia, or other neurodiversity], [Cultural considerations].',
-        'RAG',
-        'public',
-        NOW()
-      ),
-      (
-        uuid_generate_v4(),
-        'Summarize a Chapter',
-        'Act as an expert academic assistant. Your task is to provide a concise and comprehensive summary of a single chapter.
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Suggest study strategies');
+
+    -- Summarize a Chapter
+    INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
+    SELECT 
+      uuid_generate_v4(),
+      'Summarize a Chapter',
+      'Act as an expert academic assistant. Your task is to provide a concise and comprehensive summary of a single chapter.
 
 1. Identify the three primary learning objectives or core arguments of [CHAPTER_TITLE] from the [TEXTBOOK_NAME] text.
 
@@ -213,17 +247,16 @@ exports.up = (pgm) => {
 3. Ensure the summary is tailored for a student at the [GRADE_LEVEL_OR_COURSE] level.
 
 4. Conclude the summary with a list of three critical vocabulary terms from the chapter.',
-        'RAG',
-        'public',
-        NOW()
-      )
-    ON CONFLICT (name) DO NOTHING;
+      'RAG',
+      'public',
+      NOW()
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Summarize a Chapter');
   `);
 
-  // Insert guided prompt template
+  // Insert guided prompt template (only if it doesn't exist)
   pgm.sql(`
     INSERT INTO prompt_templates (id, name, description, type, visibility, created_at)
-    VALUES (
+    SELECT 
       uuid_generate_v4(),
       'Detailed Lesson Plan Generator',
       'Create a detailed lesson plan for [subject] targeting [grade_level] students. The lesson will focus on [topic] and run for [duration]. Learning objectives include [objectives]. Students have [prior_knowledge] background. The lesson should incorporate [teaching_methods] and include [assessment_type] for evaluation. Materials needed: [materials]. Special considerations: [accommodations].
@@ -244,34 +277,143 @@ Ensure the lesson promotes active learning, critical thinking, and student engag
       'guided',
       'public',
       NOW()
-    )
-    ON CONFLICT (name) DO NOTHING;
+    WHERE NOT EXISTS (SELECT 1 FROM prompt_templates WHERE name = 'Detailed Lesson Plan Generator');
   `);
 
-  // Insert guided prompt questions for the Detailed Lesson Plan Generator
+  // Insert guided prompt questions (only if they don't exist)
   pgm.sql(`
+    -- Insert guided prompt questions for the Detailed Lesson Plan Generator
+    -- Only inserts if the question doesn't already exist for this template
+    
     INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
     SELECT 
       uuid_generate_v4(),
       pt.id,
-      q.question_text,
-      q.order_index
+      'What subject area is this lesson for? (e.g., Mathematics, Science, English Language Arts, Social Studies)',
+      1
     FROM prompt_templates pt
-    CROSS JOIN (
-      VALUES 
-        ('What subject area is this lesson for? (e.g., Mathematics, Science, English Language Arts, Social Studies)', 1),
-        ('What grade level are you targeting? (e.g., Grade 3, High School, College Freshman)', 2),
-        ('What specific topic will the lesson focus on? (e.g., Fractions, Photosynthesis, Essay Writing)', 3),
-        ('How long will the lesson run? (e.g., 45 minutes, 90 minutes, 2 hours)', 4),
-        ('What are the main learning objectives for this lesson?', 5),
-        ('What prior knowledge should students have before this lesson?', 6),
-        ('What teaching methods would you like to incorporate? (e.g., direct instruction, group work, hands-on activities)', 7),
-        ('What type of assessment would you like to include? (e.g., quiz, project, discussion, observation)', 8),
-        ('What materials and resources are available for this lesson?', 9),
-        ('Are there any special accommodations or considerations needed for students?', 10)
-    ) AS q(question_text, order_index)
     WHERE pt.name = 'Detailed Lesson Plan Generator'
-    ON CONFLICT DO NOTHING;
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 1
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What grade level are you targeting? (e.g., Grade 3, High School, College Freshman)',
+      2
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 2
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What specific topic will the lesson focus on? (e.g., Fractions, Photosynthesis, Essay Writing)',
+      3
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 3
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'How long will the lesson run? (e.g., 45 minutes, 90 minutes, 2 hours)',
+      4
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 4
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What are the main learning objectives for this lesson?',
+      5
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 5
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What prior knowledge should students have before this lesson?',
+      6
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 6
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What teaching methods would you like to incorporate? (e.g., direct instruction, group work, hands-on activities)',
+      7
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 7
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What type of assessment would you like to include? (e.g., quiz, project, discussion, observation)',
+      8
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 8
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'What materials and resources are available for this lesson?',
+      9
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 9
+      );
+
+    INSERT INTO guided_prompt_questions (id, prompt_template_id, question_text, order_index)
+    SELECT 
+      uuid_generate_v4(),
+      pt.id,
+      'Are there any special accommodations or considerations needed for students?',
+      10
+    FROM prompt_templates pt
+    WHERE pt.name = 'Detailed Lesson Plan Generator'
+      AND NOT EXISTS (
+        SELECT 1 FROM guided_prompt_questions gpq 
+        WHERE gpq.prompt_template_id = pt.id AND gpq.order_index = 10
+      );
   `);
 };
 
