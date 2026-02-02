@@ -250,6 +250,7 @@ For more detailed information about specific aspects of the OER-AI system, pleas
 
 - **[Database Migrations](Docs/DATABASE_MIGRATIONS.md)**: Complete guide to the database migration system, creating new migrations, and best practices
 - **[Dependency Management](Docs/DEPENDENCY_MANAGEMENT.MD)**: Instructions for managing Python dependencies in Lambda functions using pip-tools
+- **[Changelog](Docs/CHANGELOG.md)**: Record of all notable changes made to the project
 
 ### API & Usage
 
