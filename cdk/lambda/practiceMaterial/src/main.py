@@ -289,7 +289,7 @@ def apply_guardrails(text: str, source: str = "INPUT") -> dict:
         bedrock_client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
         response = bedrock_client.apply_guardrail(
             guardrailIdentifier=GUARDRAIL_ID,
-            guardrailVersion="DRAFT",
+            guardrailVersion="1",
             source=source,
             content=[{"text": {"text": text}}]
         )

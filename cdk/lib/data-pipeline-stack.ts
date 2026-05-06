@@ -34,7 +34,7 @@ export class DataPipelineStack extends cdk.Stack {
 
     // Create S3 bucket for CSV ingestion
     this.csvBucket = new s3.Bucket(this, `${id}-csv-bucket`, {
-      bucketName: `${id.toLowerCase()}-csv-ingestion-bucket`,
+
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       cors: [
         {
@@ -193,7 +193,7 @@ export class DataPipelineStack extends cdk.Stack {
 
     // Create S3 bucket for Glue scripts and custom modules
     this.glueBucket = new s3.Bucket(this, `${id}-glue-bucket`, {
-      bucketName: `${id.toLowerCase()}-glue-processing-bucket`,
+
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
