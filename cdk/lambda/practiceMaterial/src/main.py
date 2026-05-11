@@ -515,6 +515,7 @@ def handler(event, context):
     # Flashcard-specific parameters
     num_cards = clamp(int(body.get("num_cards", 10)), 1, 20)
     card_type = str(body.get("card_type", "definition")).lower().strip()
+    logger.info(f"Parsed parameters - material_type: {material_type}, card_type: {card_type}, num_cards: {num_cards}, difficulty: {difficulty}, topic: {topic}")
     
     # Short answer-specific parameters
     # For short answers, reuse num_questions but with different limits
