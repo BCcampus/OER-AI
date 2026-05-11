@@ -31,7 +31,8 @@ import * as targets from "aws-cdk-lib/aws-events-targets";
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
   codeBuildProjects?: { [key: string]: codebuild.IProject };
-  csvBucket: s3.Bucket;
+  csvBucketName: string;
+  csvBucketArn: string;
   textbookIngestionQueue: sqs.Queue;
 }
 
@@ -856,14 +857,15 @@ export class ApiGatewayStack extends cdk.Stack {
         timeout: Duration.seconds(30),
         memorySize: 128,
         environment: {
-          BUCKET: props.csvBucket.bucketName,
+          BUCKET: props.csvBucketName,
           REGION: this.region,
         },
         role: lambdaRole,
       }
     );
 
-    props.csvBucket.grantPut(presignedUrlFunction);
+    const csvBucket = s3.Bucket.fromBucketArn(this, "ImportedCsvBucket", props.csvBucketArn);
+    csvBucket.grantPut(presignedUrlFunction);
 
     presignedUrlFunction.grantInvoke(
       new iam.ServicePrincipal("apigateway.amazonaws.com")

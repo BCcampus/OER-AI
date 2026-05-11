@@ -565,5 +565,19 @@ export class DataPipelineStack extends cdk.Stack {
       value: this.mediaIngestionQueue.queueUrl,
       description: "URL of the media ingestion SQS queue",
     });
+
+    // Stable exports for cross-stack references (avoids CDK auto-generated export names
+    // that change when logical IDs change, causing "Cannot update export" errors)
+    new cdk.CfnOutput(this, "CsvBucketName", {
+      value: this.csvBucket.bucketName,
+      exportName: `${id}-CsvBucketName`,
+      description: "Name of the CSV ingestion bucket",
+    });
+
+    new cdk.CfnOutput(this, "CsvBucketArn", {
+      value: this.csvBucket.bucketArn,
+      exportName: `${id}-CsvBucketArn`,
+      description: "ARN of the CSV ingestion bucket",
+    });
   }
 }
