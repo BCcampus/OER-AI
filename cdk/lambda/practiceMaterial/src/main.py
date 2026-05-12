@@ -1,3 +1,5 @@
+# Practice Material Lambda - Docker-based
+# Deployment version: 2024-05-12-v2 (card_type prompt fix)
 import os
 import json
 import time
