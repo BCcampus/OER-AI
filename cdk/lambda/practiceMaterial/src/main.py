@@ -914,6 +914,13 @@ def handle_grading(event, context):
     except Exception as e:
         logger.exception("Error grading answer")
         return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+            },
             "body": json.dumps({"error": f"Error grading answer: {str(e)}"}),
         }
 
