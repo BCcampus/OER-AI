@@ -1900,7 +1900,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // API Gateway permission
+    // API Gateway permission - on base function (unqualified invocations)
     practiceMaterialDockerFunc.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
@@ -1923,6 +1923,13 @@ export class ApiGatewayStack extends cdk.Stack {
       aliasName: "live",
       version: practiceMaterialDockerFunc.currentVersion,
       provisionedConcurrentExecutions: 1,
+    });
+
+    // API Gateway permission - on alias (qualified :live invocations from OpenAPI integration)
+    practiceMaterialAlias.addPermission("AllowApiGatewayInvokeAlias", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks/*/practice_materials*`,
     });
 
     // WebSocket streaming support - add environment variable and permissions
