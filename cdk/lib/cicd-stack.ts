@@ -47,6 +47,7 @@ export class CICDStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: [
           "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
           "lambda:PublishVersion",
@@ -245,14 +246,28 @@ export class CICDStack extends cdk.Stack {
                         --image-uri $REPOSITORY_URI:latest
 
                       echo "Waiting for function update to complete..."
-                      aws lambda wait function-updated \
-                        --function-name $LAMBDA_FUNCTION_NAME
+                      # Wait with retries - function-updated waiter needs GetFunctionConfiguration
+                      for i in $(seq 1 30); do
+                        STATUS=$(aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME \
+                          --query "Configuration.LastUpdateStatus" --output text 2>/dev/null || echo "Unknown")
+                        if [ "$STATUS" = "Successful" ]; then
+                          echo "Function update completed successfully."
+                          break
+                        fi
+                        echo "Update status: $STATUS - waiting... (attempt $i/30)"
+                        sleep 5
+                      done
 
                       echo "Publishing new version..."
                       NEW_VERSION=$(aws lambda publish-version \
                         --function-name $LAMBDA_FUNCTION_NAME \
                         --description "Pipeline deploy: $IMAGE_TAG" \
                         --query "Version" --output text)
+                      
+                      if [ -z "$NEW_VERSION" ] || [ "$NEW_VERSION" = "None" ]; then
+                        echo "ERROR: Failed to publish new version."
+                        exit 1
+                      fi
                       echo "Published version: $NEW_VERSION"
 
                       echo "Updating live alias to version $NEW_VERSION..."
@@ -260,10 +275,10 @@ export class CICDStack extends cdk.Stack {
                         aws lambda update-alias \
                           --function-name $LAMBDA_FUNCTION_NAME \
                           --name live \
-                          --function-version $NEW_VERSION
+                          --function-version "$NEW_VERSION"
                         echo "Alias live updated to version $NEW_VERSION"
                       else
-                        echo "No live alias found — skipping alias update. Function $LATEST was updated."
+                        echo "No live alias found — skipping alias update. Function \$LATEST was updated."
                       fi
                     else
                       echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist yet. Skipping update."
